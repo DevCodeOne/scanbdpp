@@ -9,8 +9,15 @@ include_directories(include)
 file(GLOB ALL_SOURCE_FILES "src/*cpp")
 
 find_package(Sane)
+find_package(DBusCpp)
+find_package(UDev)
 
 include_directories(${SANE_INCLUDE_DIR})
+include_directories(${DBusCpp_INCLUDE_DIR})
+include_directories(${UDev_INCLUDE_DIR})
 
 add_executable(scanbdpp ${ALL_SOURCE_FILES})
+
 target_link_libraries(scanbdpp ${SANE_LIBRARY})
+target_link_libraries(scanbdpp ${DBusCpp_LIBRARIES})
+target_link_libraries(scanbdpp ${UDev_LIBRARIES})
