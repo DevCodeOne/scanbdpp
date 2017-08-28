@@ -12,6 +12,7 @@ find_package(Sane)
 find_package(DBusCpp)
 find_package(UDev)
 find_package(Confuse)
+find_package(GTest)
 
 include_directories(${SANE_INCLUDE_DIR})
 include_directories(${DBUSCPP_INCLUDE_DIR})
