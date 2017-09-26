@@ -1,0 +1,6 @@
+[submodule "sanepp"]
+	path = sanepp
+	url = https://github.com/DevCodeOne/sanepp
+[submodule "confusepp"]
+	path = confusepp
+	url = https://github.com/DevCodeOne/confusepp
