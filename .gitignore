@@ -1,5 +1,2 @@
-build/*
-CMakeFiles/*
-cmake_install.cmake
-Makefile
-CMakeCache.txt
+build/
+compile_commands.json

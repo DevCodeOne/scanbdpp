@@ -1,12 +1,15 @@
 #include <iostream>
 
+#include "cxxopts.hpp"
 #include "confusepp.h"
+#include "udevpp.h"
+#include "sanepp.h"
 
 int main() {
     using namespace confusepp;
 
     // TODO add device Multisection
-    Root config_structure{
+    ConfigFormat config_structure{
         Section("global")
             .values(Option<bool>("debug"),
                     Option<int>("debug-level"),
@@ -40,7 +43,7 @@ int main() {
                                 Option<std::string>("script")))
     };
 
-    auto conf = Config::parse_config("conf/scanbd.conf", std::move(config_structure));
+    auto conf = Config::parse("conf/scanbd.conf", std::move(config_structure));
 
     if (conf) {
         std::cout << "Config is valid" << std::endl;

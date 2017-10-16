@@ -1,6 +1,12 @@
-[submodule "sanepp"]
-	path = sanepp
+[submodule "external/sanepp"]
+	path = external/sanepp
 	url = https://github.com/DevCodeOne/sanepp
-[submodule "confusepp"]
-	path = confusepp
+[submodule "external/confusepp"]
+	path = external/confusepp
 	url = https://github.com/DevCodeOne/confusepp
+[submodule "external/udevpp"]
+	path = external/udevpp
+	url = https://github.com/DevCodeOne/udevpp
+[submodule "external/cxxopts"]
+	path = external/cxxopts
+	url = https://github.com/jarro2783/cxxopts
