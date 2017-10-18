@@ -1,52 +1,38 @@
 #include <iostream>
 
 #include "cxxopts.hpp"
-#include "confusepp.h"
-#include "udevpp.h"
 #include "sanepp.h"
+#include "udevpp.h"
 
-int main() {
-    using namespace confusepp;
+int main(int argc, char *argv[]) {
+    cxxopts::Options options("scanbd", "scanbd is a scanner button daemon");
 
-    // TODO add device Multisection
-    ConfigFormat config_structure{
-        Section("global")
-            .values(Option<bool>("debug"),
-                    Option<int>("debug-level"),
-                    Option<std::string>("user"),
-                    Option<std::string>("group"),
-                    Option<std::string>("saned"),
-                    Option<List<std::string>>("saned_opt"),
-                    Option<List<std::string>>("saned_env"),
-                    Option<std::string>("scriptdir"),
-                    Option<std::string>("device_insert_script"),
-                    Option<std::string>("device_remove_script"),
-                    Option<int>("timeout"),
-                    Option<std::string>("pidfile"),
-                    Section("environment")
-                        .values(Option<std::string>("device"),
-                                Option<std::string>("action")),
-                    Multisection("function")
-                        .values(Option<std::string>("filter"),
-                                Option<std::string>("desc"),
-                                Option<std::string>("env")),
-                    Option<bool>("multiple_actions"),
-                    Multisection("action")
-                        .values(Option<std::string>("filter"),
-                                Section("numerical-trigger")
-                                    .values(Option<int>("from-value"),
-                                            Option<int>("to-value")),
-                                Section("string-trigger")
-                                    .values(Option<std::string>("from-value"),
-                                            Option<std::string>("to-value")),
-                                Option<std::string>("desc"),
-                                Option<std::string>("script")))
-    };
+    options.add_options()
+        ("m,manager", "start in manager mode")
+        ("s,signal", "start in signal mode")
+        ("d,debug", "enable debugging", cxxopts::value<int>())
+        ("f,foreground", "start in foreground")
+        ("c,config", "provide custom config file", cxxopts::value<std::string>())
+        ("t,trigger", "add trigger for device", cxxopts::value<int>())
+        ("a,action", "trigger action number", cxxopts::value<int>())
+        ("h,help", "print this help menu");
 
-    auto conf = Config::parse("conf/scanbd.conf", std::move(config_structure));
+    try {
+        options.parse(argc, argv);
 
-    if (conf) {
-        std::cout << "Config is valid" << std::endl;
+        if (options.count("help")) {
+            std::cout << options.help() << std::endl;
+        }
+        if (options.count("d")) {
+            std::cout << options["d"].as<int>() << std::endl;
+        }
+    } catch (cxxopts::option_not_exists_exception e) {
+        std::cout << e.what() << std::endl;
+        std::cout << options.help() << std::endl;
+    } catch (cxxopts::option_requires_argument_exception e) {
+        std::cout << e.what() << std::endl;
+    } catch (cxxopts::argument_incorrect_type e) {
+        std::cout << "The provided argument is of the wrong type"<< std::endl;
     }
 
     return 0;
