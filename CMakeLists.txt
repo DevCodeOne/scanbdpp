@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.6.2)
 project(scanbdpp C CXX)
-set(EXECUTABLE_OUTPUT_PATH build)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 add_compile_options(-Wall -Wextra -Wpedantic)
 add_definitions(-std=c++17)
