@@ -1,0 +1,9 @@
+---
+BasedOnStyle: Google
+ColumnLimit: '120'
+IndentWidth: '4'
+SortIncludes: true
+TabWidth: '4'
+SpaceAfterTemplateKeyword: false
+NamespaceIndentation: All
+...
