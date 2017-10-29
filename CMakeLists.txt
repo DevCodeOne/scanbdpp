@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.6.2)
 project(scanbdpp C CXX)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-add_compile_options(-Wall -Wextra -Wpedantic)
+add_compile_options(-Wall -Wextra -Wpedantic -g)
 add_definitions(-std=c++17)
 
 add_subdirectory(external/confusepp)

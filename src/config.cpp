@@ -1,10 +1,12 @@
+#include <experimental/filesystem>
 #include <memory>
 
 #include "config.h"
+#include "run_configuration.h"
 
 namespace scanbdpp {
 
-    void load_config(const std::experimental::filesystem::path &config_file) {
+    void load_config() {
         using namespace confusepp;
 
         // TODO add device Multisection
@@ -24,7 +26,7 @@ namespace scanbdpp {
                 Section("string-trigger").values(Option<std::string>("from-value"), Option<std::string>("to-value")),
                 Option<std::string>("desc"), Option<std::string>("script")))};
 
-        auto conf = Config::parse(config_file, std::move(config_structure));
+        auto conf = Config::parse(run_config.config_path(), std::move(config_structure));
 
         if (conf) {
             config = std::make_unique<Config>(std::move(*conf));
