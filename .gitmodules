@@ -9,4 +9,4 @@
 	url = https://github.com/DevCodeOne/udevpp
 [submodule "external/cxxopts"]
 	path = external/cxxopts
-	url = https://github.com/DevCodeOne/cxxopts
+	url = https://github.com/jarro2783/cxxopts

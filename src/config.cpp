@@ -6,7 +6,21 @@
 
 namespace scanbdpp {
 
-    void load_config() {
+    Config::Config() { reload_config(); }
+
+    Config::operator bool() const {
+        std::lock_guard<std::mutex> config_guard{_config_mutex};
+
+        return _config.get() != nullptr;
+    }
+
+    void Config::reload_config() {
+        std::lock_guard<std::mutex> config_guard{_config_mutex};
+
+        if (_config) {
+            return;
+        }
+
         using namespace confusepp;
 
         // TODO add device Multisection
@@ -26,22 +40,23 @@ namespace scanbdpp {
                 Section("string-trigger").values(Option<std::string>("from-value"), Option<std::string>("to-value")),
                 Option<std::string>("desc"), Option<std::string>("script")))};
 
-        auto conf = Config::parse(run_config.config_path(), std::move(config_structure));
+        auto conf = confusepp::Config::parse(run_config.config_path(), std::move(config_structure));
 
         if (conf) {
-            config = std::make_unique<Config>(std::move(*conf));
+            _config = std::make_unique<confusepp::Config>(std::move(*conf));
         }
     }
 
     // TODO check if method does the correct thing
     std::experimental::filesystem::path make_script_path_absolute(std::experimental::filesystem::path script_path) {
+        Config conf;
         std::experimental::filesystem::path absolute_path = "";
 
         if (script_path.is_absolute()) {
             absolute_path = script_path;
         } else {
-            if (config) {
-                auto script_dir = config->get<confusepp::Option<std::string>>("scriptdir");
+            if (conf) {
+                auto script_dir = conf.get<confusepp::Option<std::string>>("scriptdir");
                 if (script_dir) {
                     std::experimental::filesystem::path script_dir_path = script_dir->value();
                     if (script_dir_path.empty() == 0) {
@@ -49,7 +64,8 @@ namespace scanbdpp {
                     } else if (script_dir_path.is_absolute()) {
                         absolute_path = script_dir_path / script_path;
                     } else {
-                        absolute_path = std::experimental::filesystem::path(SCANBD_CFG_DIR) / script_dir_path / script_path;
+                        absolute_path =
+                            std::experimental::filesystem::path(SCANBD_CFG_DIR) / script_dir_path / script_path;
                     }
                 }
             }
@@ -57,4 +73,5 @@ namespace scanbdpp {
 
         return absolute_path;
     }
+
 }  // namespace scanbdpp

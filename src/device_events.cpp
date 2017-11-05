@@ -1,4 +1,5 @@
 #include "common.h"
+#include "device_events.h"
 
 #include <cstdlib>
 
@@ -15,11 +16,11 @@
 
 namespace scanbdpp {
 
-    constexpr size_t path_max = 512;
 
-    static void hook_device_ex(const std::string &parameter, const std::string &action_name,
-                               const std::string &device_name) {
-        if (!config || !config->get<confusepp::Option<std::string>>(parameter)) {
+    void DeviceEvents::hook_device_ex(const std::string &parameter, const std::string &action_name,
+                                 const std::string &device_name) {
+        Config config;
+        if (!config || !config.get<confusepp::Option<std::string>>(parameter)) {
             return;
         }
 
@@ -67,13 +68,13 @@ namespace scanbdpp {
             environment_variables.emplace_back(strdup(pwd->pw_dir));
         }
 
-        if (auto device = config->get<confusepp::Option<std::string>>(root / "device"); device) {
+        if (auto device = config.get<confusepp::Option<std::string>>(root / "device"); device) {
             std::ostringstream device_environment;
             device_environment << device->value() << "=" << device_name;
             environment_variables.emplace_back(strdup(device_environment.str().c_str()));
         }
 
-        if (auto action = config->get<confusepp::Option<std::string>>(root / "action"); action) {
+        if (auto action = config.get<confusepp::Option<std::string>>(root / "action"); action) {
             std::ostringstream action_environment;
             action_environment << action->value() << "=" << action_name;
             environment_variables.emplace_back(strdup(action_environment.str().c_str()));
@@ -81,7 +82,7 @@ namespace scanbdpp {
 
         environment_variables.emplace_back(nullptr);
 
-        std::string script = config->get<confusepp::Option<std::string>>(parameter)->value();
+        std::string script = config.get<confusepp::Option<std::string>>(parameter)->value();
         if (auto script_path = make_script_path_absolute(script); !script_path.empty()) {
             if (pid_t cpid = fork(); cpid > 0) {
                 int status = 0;
@@ -112,20 +113,22 @@ namespace scanbdpp {
         }
     }
 
-    static void hook_device_insert(const std::string &device_name) { hook_device_ex("", "insert", device_name); }
+    void DeviceEvents::hook_device_insert(const std::string &device_name) { hook_device_ex("", "insert", device_name); }
 
-    static void hook_device_remove(const std::string &device_name) { hook_device_ex("", "remove", device_name); }
+    void DeviceEvents::hook_device_remove(const std::string &device_name) { hook_device_ex("", "remove", device_name); }
 
-    void signal_device_added() {
-        stop_sane_threads();
+    void DeviceEvents::device_added() {
+        SaneHandler sane;
+        sane.stop();
         hook_device_insert("dbus device");
-        start_sane_threads();
+        sane.start();
     }
 
     // TODO Look if the device is even used and only restart sane if it's necessary
-    void signal_device_removed() {
-        stop_sane_threads();
+    void DeviceEvents::device_removed() {
+        SaneHandler sane;
+        sane.stop();
         hook_device_remove("dbus device");
-        start_sane_threads();
+        sane.start();
     }
 }  // namespace scanbdpp
