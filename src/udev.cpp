@@ -36,14 +36,14 @@ namespace scanbdpp {
         }
     }
 
-    void UDevHandler::start() {
+    void UDevHandler::start() const {
         if (!_thread_started) {
             _thread_started = true;
             _thread_inst = std::thread(udev_thread);
         }
     }
 
-    void UDevHandler::stop() {
+    void UDevHandler::stop() const {
         if (_thread_started) {
             _thread_stop = true;
         }

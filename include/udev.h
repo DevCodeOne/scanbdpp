@@ -7,8 +7,8 @@
 namespace scanbdpp {
     class UDevHandler {
        public:
-        void start();
-        void stop();
+        void start() const;
+        void stop() const;
 
        private:
         static void udev_thread();

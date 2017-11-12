@@ -16,11 +16,11 @@
 
 #include "config.h"
 #include "daemonize.h"
+#include "queue.h"
 #include "run_configuration.h"
 #include "sane.h"
 #include "udev.h"
 
-// TODO what is trigger_device and trigger_action
 int main(int argc, char *argv[]) {
     using namespace scanbdpp;
     using namespace cxxopts;
@@ -76,10 +76,20 @@ int main(int argc, char *argv[]) {
         return EXIT_FAILURE;
     }
 
-
     // Config config;
-    // SaneHandler sane;
+    SaneHandler sane;
     // UDevHandler udev;
+    // QueueHandler queue;
+
+    // queue.start();
+    sane.start();
+
+    std::this_thread::sleep_for(std::chrono::seconds(10));
+
+    sane.stop();
+
+    // queue.stop();
+
 
     // if (auto value = config.get<Option<int>>("/global/debug"); value) {
     //     run_config.debug(run_config.debug() | value->value());

@@ -1,5 +1,4 @@
 #include "common.h"
-#include "device_events.h"
 
 #include <cstdlib>
 
@@ -11,14 +10,14 @@
 #include <sys/wait.h>
 
 #include "config.h"
+#include "device_events.h"
 #include "sane.h"
 #include "signal.h"
 
 namespace scanbdpp {
 
-
     void DeviceEvents::hook_device_ex(const std::string &parameter, const std::string &action_name,
-                                 const std::string &device_name) {
+                                      const std::string &device_name) {
         Config config;
         if (!config || !config.get<confusepp::Option<std::string>>(parameter)) {
             return;

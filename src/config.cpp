@@ -33,7 +33,7 @@ namespace scanbdpp {
             Section("environment").values(Option<std::string>("device"), Option<std::string>("action")),
             Multisection("function")
                 .values(Option<std::string>("filter"), Option<std::string>("desc"), Option<std::string>("env")),
-            Option<bool>("multiple_actions"),
+            Option<bool>("multiple_actions").default_value(true),
             Multisection("action").values(
                 Option<std::string>("filter"),
                 Section("numerical-trigger").values(Option<int>("from-value"), Option<int>("to-value")),
