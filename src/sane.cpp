@@ -130,9 +130,7 @@ namespace scanbdpp {
         Config config;
 
         if (auto function_multi_section = root.get<confusepp::Multisection>("functions"); function_multi_section) {
-            auto function_sections = function_multi_section->sections();
-
-            for (auto current_function : function_sections) {
+            for (auto current_function : function_multi_section->sections()) {
                 if (auto filter = current_function.get<confusepp::Option<std::string>>("filter"); filter) {
                     std::regex function_regex;
                     bool regex_is_valid = true;
@@ -195,7 +193,7 @@ namespace scanbdpp {
 
                     auto script = current_action.get<confusepp::Option<std::string>>("script");
 
-                    // TODO discuss if it should be possible to install an action with a script to execute
+                    // TODO discuss if it should be possible to install an action without a script to execute
                     if (!script) {
                         // Error no script set
                         continue;
@@ -223,6 +221,58 @@ namespace scanbdpp {
 
                         option_with_script->m_action_name = current_action.title();
                         option_with_script->m_script = script->value();
+                        option_with_script->m_option = current_option;
+                        option_with_script->m_last_value = current_option.value_as_variant();
+
+                        auto init_range_values = [&current_action, &option_with_script](const auto &sane_value) {
+                            using current_type = std::decay_t<decltype(sane_value)>;
+                            if constexpr (std::is_same_v<current_type, int> ||
+                                          std::is_same_v<current_type, sanepp::Fixed> ||
+                                          std::is_same_v<current_type, bool>) {
+                                auto ret = current_action.get<confusepp::Section>("numerical-trigger");
+
+                                if (!ret) {
+                                    return;
+                                }
+
+                                if (auto int_value = ret->get<confusepp::Option<int>>("from-value"); int_value) {
+                                    option_with_script->m_from_value = ActionValue<int>(int_value->value());
+                                }
+
+                                if (auto int_value = ret->get<confusepp::Option<int>>("to-value"); int_value) {
+                                    option_with_script->m_to_value = ActionValue<int>(int_value->value());
+                                }
+
+                            } else if constexpr (std::is_same_v<current_type, std::string>) {
+                                auto ret = current_action.get<confusepp::Section>("string-trigger");
+
+                                if (!ret) {
+                                    return;
+                                }
+
+                                try {
+                                    if (auto string_value = ret->get<confusepp::Option<std::string>>("from-value");
+                                        string_value) {
+                                        option_with_script->m_from_value =
+                                            ActionValue<std::string>(string_value->value());
+                                    }
+
+                                    if (auto string_value = ret->get<confusepp::Option<std::string>>("to-value");
+                                        string_value) {
+                                        option_with_script->m_to_value =
+                                            ActionValue<std::string>(string_value->value());
+                                    }
+                                } catch (std::regex_error) {
+                                    // Error compiling regular expressions
+                                }
+                            }
+                        };
+
+                        if (current_option.value_as_variant()) {
+                            std::visit(init_range_values, *current_option.value_as_variant());
+                        } else {
+                            // Error can't get value of current option
+                        }
                     }
                 }
             }
@@ -242,9 +292,95 @@ namespace scanbdpp {
             return;
         }
 
-        while (!should_stop()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        Config config;
+        auto global_section = config.get<confusepp::Section>("global");
+
+        if (!global_section) {
+            // Config is invalid
+            return;
+        }
+
+        find_matching_options(*device, *global_section);
+        find_matching_functions(*device, *global_section);
+
+        if (auto device_multi_section = config.get<confusepp::Multisection>("device"); device_multi_section) {
+            for (auto device_section : device_multi_section->sections()) {
+                auto device_filter = device_section.get<confusepp::Option<std::string>>("filter");
+                if (!device_filter) {
+                    continue;
+                }
+
+                std::regex device_regex;
+
+                try {
+                    device_regex.assign(device_filter->value(), std::regex_constants::extended);
+                } catch (std::regex_error) {
+                    // Regex error
+                    continue;
+                }
+
+                if (!std::regex_match(device_info().name().data(), device_regex)) {
+                    continue;
+                }
+
+                auto local_actions = device_section.get<confusepp::Multisection>("action");
+
+                if (!local_actions) {
+                    continue;
+                }
+
+                // Found local actions for device
+
+                find_matching_options(*device, device_section);
+                find_matching_options(*device, device_section);
+            }
+        }
+
+        int timeout = config.get<confusepp::Option<int>>("timeout")->value();
+
+        // Start the polling for device
+        while (!m_terminate) {
+            // polling device
+            for (auto current_action : m_actions) {
+                if (!current_action.m_last_value) {
+                    current_action.m_last_value = current_action.m_option.value_as_variant();
+                }
+
+                auto current_value = current_action.m_option.value_as_variant();
+                if (!current_value) {
+                    // Error can't get current value of option
+                    continue;
+                }
+
+                auto has_value_changed = [&current_action](const auto &current_value) -> bool {
+                    using type = std::decay_t<decltype(current_value)>;
+
+                    if (!std::holds_alternative<type>(*current_action.m_last_value)) {
+                        // Type of action has changed shouldn't happen
+                        return false;
+                    }
+
+                    if constexpr (std::is_same_v<type, int> || std::is_same_v<type, std::string> ||
+                                  std::is_same_v<type, sanepp::Fixed> || std::is_same_v<type, bool>) {
+                        return std::get<ActionValue<type>>(current_action.m_from_value) == current_value
+                            && std::get<ActionValue<type>>(current_action.m_to_value) == std::get<type>(current_action.m_last_value.value());
+                    } else {
+                        // Action has invalid type shouldn't happen
+                    }
+                    return false;
+                };
+
+                bool value_changed = std::visit(has_value_changed, *current_value);
+
+                // TODO Handle script, also add event triggers that can be triggered from outside the thread
+                if (value_changed) {
+
+                }
+
+                current_action.m_last_value = current_value;
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
         }
     }
-
 }  // namespace scanbdpp

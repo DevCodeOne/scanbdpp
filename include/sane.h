@@ -19,18 +19,64 @@ namespace scanbdpp {
 
     template<typename T>
     struct ActionValue {
+       public:
         using value_type = T;
 
-        T value;
+        ActionValue(const int &value = T{}) : m_value(value) {}
+
+        const T &value() const { return m_value; }
+
+        ActionValue &value(const T &value) {
+            m_value = value;
+            return *this;
+        }
+
+        bool match(const T &other) const { return m_value == other; }
+
+       private:
+        T m_value;
     };
 
     template<>
     struct ActionValue<std::string> {
+       public:
         using value_type = std::string;
 
-        std::string value;
-        std::regex regexp;
+        inline ActionValue(const std::string &value = std::string{})
+            : m_regexp(value, std::regex_constants::extended) {}
+
+        inline ActionValue &regexp(const std::string &value) {
+            m_regexp.assign(value, std::regex_constants::extended);
+            return *this;
+        }
+
+        inline const std::regex &value() const { return m_regexp; }
+
+        inline bool match(const std::string &other) const { return std::regex_match(other, m_regexp); }
+
+       private:
+        std::regex m_regexp;
     };
+
+    template<typename T>
+    bool operator==(const ActionValue<T> &lhs, const T &rhs) {
+        return lhs.match(rhs);
+    }
+
+    template<typename T>
+    bool operator==(const T &lhs, const ActionValue<T> &rhs) {
+        return rhs == lhs;
+    }
+
+    template<typename T>
+    bool operator!=(const ActionValue<T> &lhs, const T &rhs) {
+        return !(lhs.match(rhs));
+    }
+
+    template<typename T>
+    bool operator!=(const T &lhs, const ActionValue<T> &rhs) {
+        return rhs != lhs;
+    }
 
     class SaneHandler {
        public:
@@ -62,11 +108,12 @@ namespace scanbdpp {
            private:
             struct Action {
                 using value_type = std::variant<ActionValue<int>, ActionValue<sanepp::Fixed>, ActionValue<bool>,
-                                                     ActionValue<std::string>>;
+                                                ActionValue<std::string>>;
 
                 inline Action(const sanepp::Option &option) : m_option(option) {}
 
                 sanepp::Option m_option;
+                std::optional<sanepp::Option::value_type> m_last_value;
                 value_type m_from_value;
                 value_type m_to_value;
                 std::string m_script;
