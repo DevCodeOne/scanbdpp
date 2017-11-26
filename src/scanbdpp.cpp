@@ -77,16 +77,16 @@ int main(int argc, char *argv[]) {
     }
 
     // Config config;
-    SaneHandler sane;
+    // SaneHandler sane;
     // UDevHandler udev;
-    // QueueHandler queue;
+    QueueHandler queue;
 
     // queue.start();
-    sane.start();
+    queue.start();
 
     std::this_thread::sleep_for(std::chrono::seconds(10));
 
-    sane.stop();
+    queue.stop();
 
     // queue.stop();
 

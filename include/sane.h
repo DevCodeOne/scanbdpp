@@ -6,6 +6,7 @@
 #include <thread>
 #include <variant>
 #include <vector>
+#include <experimental/filesystem>
 
 #include "confusepp.h"
 
@@ -13,7 +14,7 @@
 
 namespace scanbdpp {
     struct Function {
-        sanepp::Option m_option;
+        sanepp::OptionInfo m_option_info;
         std::string m_env;
     };
 
@@ -110,13 +111,13 @@ namespace scanbdpp {
                 using value_type = std::variant<ActionValue<int>, ActionValue<sanepp::Fixed>, ActionValue<bool>,
                                                 ActionValue<std::string>>;
 
-                inline Action(const sanepp::Option &option) : m_option(option) {}
+                inline Action(const sanepp::OptionInfo &option_info) : m_option_info(option_info) {}
 
-                sanepp::Option m_option;
+                sanepp::OptionInfo m_option_info;
                 std::optional<sanepp::Option::value_type> m_last_value;
                 value_type m_from_value;
                 value_type m_to_value;
-                std::string m_script;
+                std::experimental::filesystem::path m_script;
                 std::string m_action_name;
             };
 

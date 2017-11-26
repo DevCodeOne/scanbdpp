@@ -2,6 +2,8 @@
 
 #include <string>
 
+#include "defines.h"
+
 namespace scanbdpp {
     class DeviceEvents {
        public:

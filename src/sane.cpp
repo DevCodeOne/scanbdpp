@@ -124,14 +124,15 @@ namespace scanbdpp {
 
     std::thread &SaneHandler::PollHandler::poll_thread() { return m_poll_thread; }
 
-    // TODO change placeholder strings
     void SaneHandler::PollHandler::find_matching_functions(const sanepp::Device &device,
                                                            const confusepp::Section &root) {
         Config config;
 
-        if (auto function_multi_section = root.get<confusepp::Multisection>("functions"); function_multi_section) {
+        if (auto function_multi_section = root.get<confusepp::Multisection>(Config::Constants::function);
+            function_multi_section) {
             for (auto current_function : function_multi_section->sections()) {
-                if (auto filter = current_function.get<confusepp::Option<std::string>>("filter"); filter) {
+                if (auto filter = current_function.get<confusepp::Option<std::string>>(Config::Constants::filter);
+                    filter) {
                     std::regex function_regex;
                     bool regex_is_valid = true;
                     try {
@@ -150,15 +151,16 @@ namespace scanbdpp {
                             continue;
                         }
 
-                        if (auto env = current_function.get<confusepp::Option<std::string>>("env"); env) {
+                        if (auto env = current_function.get<confusepp::Option<std::string>>(Config::Constants::env);
+                            env) {
                             auto function_with_env =
                                 std::find_if(m_functions.begin(), m_functions.end(),
                                              [&env](const Function &current) { return current.m_env == env->value(); });
                             if (function_with_env != m_functions.cend()) {
                                 // Warning for overriding function
-                                function_with_env->m_option = current_option;
+                                function_with_env->m_option_info = current_option.info();
                             } else {
-                                m_functions.emplace_back(Function{current_option, env->value()});
+                                m_functions.emplace_back(Function{current_option.info(), env->value()});
                             }
                         } else {
                             // Error no env is set
@@ -169,15 +171,16 @@ namespace scanbdpp {
         }
     }
 
-    // TODO change placeholder strings
     void SaneHandler::PollHandler::find_matching_options(const sanepp::Device &device, const confusepp::Section &root) {
         Config config;
 
-        if (auto action_multi_section = root.get<confusepp::Multisection>("actions"); action_multi_section) {
+        if (auto action_multi_section = root.get<confusepp::Multisection>(Config::Constants::action);
+            action_multi_section) {
             auto action_sections = action_multi_section->sections();
 
             for (auto current_action : action_sections) {
-                if (auto filter = current_action.get<confusepp::Option<std::string>>("filter"); filter) {
+                if (auto filter = current_action.get<confusepp::Option<std::string>>(Config::Constants::filter);
+                    filter) {
                     std::regex action_regex;
                     bool regex_is_valid = true;
                     try {
@@ -191,7 +194,7 @@ namespace scanbdpp {
                         continue;
                     }
 
-                    auto script = current_action.get<confusepp::Option<std::string>>("script");
+                    auto script = current_action.get<confusepp::Option<std::string>>(Config::Constants::script);
 
                     // TODO discuss if it should be possible to install an action without a script to execute
                     if (!script) {
@@ -204,24 +207,27 @@ namespace scanbdpp {
                             continue;
                         }
 
-                        auto multiple_actions_allowed = config.get<confusepp::Option<bool>>("/global/multiple_actions");
+                        auto multiple_actions_allowed = config.get<confusepp::Option<bool>>(
+                            Config::Constants::global / Config::Constants::multiple_actions);
 
-                        auto option_with_script = std::find_if(
-                            m_actions.begin(), m_actions.end(),
-                            [&current_option](const auto &action) { return action.m_option == current_option; });
+                        auto option_with_script =
+                            std::find_if(m_actions.begin(), m_actions.end(), [&current_option](const auto &action) {
+                                return action.m_option_info == current_option.info();
+                            });
 
+                        // TODO check if this correct
                         if (option_with_script != m_actions.cend() && !multiple_actions_allowed) {
                             // overwriting existing action
-                            option_with_script->m_option = current_option;
+                            option_with_script->m_option_info = current_option.info();
                         } else {
                             // adding additional action
-                            m_actions.emplace_back(current_option);
+                            m_actions.emplace_back(current_option.info());
                             option_with_script = m_actions.end() - 1;
                         }
 
                         option_with_script->m_action_name = current_action.title();
                         option_with_script->m_script = script->value();
-                        option_with_script->m_option = current_option;
+                        option_with_script->m_option_info = current_option.info();
                         option_with_script->m_last_value = current_option.value_as_variant();
 
                         auto init_range_values = [&current_action, &option_with_script](const auto &sane_value) {
@@ -229,35 +235,39 @@ namespace scanbdpp {
                             if constexpr (std::is_same_v<current_type, int> ||
                                           std::is_same_v<current_type, sanepp::Fixed> ||
                                           std::is_same_v<current_type, bool>) {
-                                auto ret = current_action.get<confusepp::Section>("numerical-trigger");
+                                auto ret = current_action.get<confusepp::Section>(Config::Constants::numerical_trigger);
 
                                 if (!ret) {
                                     return;
                                 }
 
-                                if (auto int_value = ret->get<confusepp::Option<int>>("from-value"); int_value) {
+                                if (auto int_value = ret->get<confusepp::Option<int>>(Config::Constants::from_value);
+                                    int_value) {
                                     option_with_script->m_from_value = ActionValue<int>(int_value->value());
                                 }
 
-                                if (auto int_value = ret->get<confusepp::Option<int>>("to-value"); int_value) {
+                                if (auto int_value = ret->get<confusepp::Option<int>>(Config::Constants::to_value);
+                                    int_value) {
                                     option_with_script->m_to_value = ActionValue<int>(int_value->value());
                                 }
 
                             } else if constexpr (std::is_same_v<current_type, std::string>) {
-                                auto ret = current_action.get<confusepp::Section>("string-trigger");
+                                auto ret = current_action.get<confusepp::Section>(Config::Constants::string_trigger);
 
                                 if (!ret) {
                                     return;
                                 }
 
                                 try {
-                                    if (auto string_value = ret->get<confusepp::Option<std::string>>("from-value");
+                                    if (auto string_value =
+                                            ret->get<confusepp::Option<std::string>>(Config::Constants::from_value);
                                         string_value) {
                                         option_with_script->m_from_value =
                                             ActionValue<std::string>(string_value->value());
                                     }
 
-                                    if (auto string_value = ret->get<confusepp::Option<std::string>>("to-value");
+                                    if (auto string_value =
+                                            ret->get<confusepp::Option<std::string>>(Config::Constants::to_value);
                                         string_value) {
                                         option_with_script->m_to_value =
                                             ActionValue<std::string>(string_value->value());
@@ -293,7 +303,7 @@ namespace scanbdpp {
         }
 
         Config config;
-        auto global_section = config.get<confusepp::Section>("global");
+        auto global_section = config.get<confusepp::Section>(Config::Constants::global);
 
         if (!global_section) {
             // Config is invalid
@@ -303,9 +313,10 @@ namespace scanbdpp {
         find_matching_options(*device, *global_section);
         find_matching_functions(*device, *global_section);
 
-        if (auto device_multi_section = config.get<confusepp::Multisection>("device"); device_multi_section) {
+        if (auto device_multi_section = config.get<confusepp::Multisection>(Config::Constants::device);
+            device_multi_section) {
             for (auto device_section : device_multi_section->sections()) {
-                auto device_filter = device_section.get<confusepp::Option<std::string>>("filter");
+                auto device_filter = device_section.get<confusepp::Option<std::string>>(Config::Constants::filter);
                 if (!device_filter) {
                     continue;
                 }
@@ -323,7 +334,7 @@ namespace scanbdpp {
                     continue;
                 }
 
-                auto local_actions = device_section.get<confusepp::Multisection>("action");
+                auto local_actions = device_section.get<confusepp::Multisection>(Config::Constants::action);
 
                 if (!local_actions) {
                     continue;
@@ -336,20 +347,21 @@ namespace scanbdpp {
             }
         }
 
-        int timeout = config.get<confusepp::Option<int>>("timeout")->value();
+        int timeout = config.get<confusepp::Option<int>>(Config::Constants::timeout)->value();
 
         // Start the polling for device
         while (!m_terminate) {
             // polling device
             for (auto current_action : m_actions) {
-                if (!current_action.m_last_value) {
-                    current_action.m_last_value = current_action.m_option.value_as_variant();
-                }
+                auto current_value = device->find_option(current_action.m_option_info);
 
-                auto current_value = current_action.m_option.value_as_variant();
-                if (!current_value) {
+                if (!current_value && current_value->value_as_variant()) {
                     // Error can't get current value of option
                     continue;
+                }
+
+                if (!current_action.m_last_value) {
+                    current_action.m_last_value = current_value->value_as_variant();
                 }
 
                 auto has_value_changed = [&current_action](const auto &current_value) -> bool {
@@ -362,22 +374,30 @@ namespace scanbdpp {
 
                     if constexpr (std::is_same_v<type, int> || std::is_same_v<type, std::string> ||
                                   std::is_same_v<type, sanepp::Fixed> || std::is_same_v<type, bool>) {
-                        return std::get<ActionValue<type>>(current_action.m_from_value) == current_value
-                            && std::get<ActionValue<type>>(current_action.m_to_value) == std::get<type>(current_action.m_last_value.value());
+                        return std::get<ActionValue<type>>(current_action.m_from_value) == current_value &&
+                               std::get<ActionValue<type>>(current_action.m_to_value) ==
+                                   std::get<type>(current_action.m_last_value.value());
                     } else {
                         // Action has invalid type shouldn't happen
                     }
                     return false;
                 };
 
-                bool value_changed = std::visit(has_value_changed, *current_value);
+                bool value_changed = std::visit(has_value_changed, *current_value->value_as_variant());
 
                 // TODO Handle script, also add event triggers that can be triggered from outside the thread
                 if (value_changed) {
+                    // Destroys current value of the optional thus freeing the resource (the device that the optional
+                    // holds)
+                    device.reset();
 
+                    // TODO start script
+
+                    // Reopen device
+                    device = m_device_info.open();
                 }
 
-                current_action.m_last_value = current_value;
+                current_action.m_last_value = current_value->value_as_variant();
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));

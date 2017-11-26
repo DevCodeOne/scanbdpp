@@ -3,6 +3,8 @@ project(scanbdpp C CXX)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 add_compile_options(-Wall -Wextra -Wpedantic -g)
 add_definitions(-std=c++17)
+add_definitions(-DSANED_PATH="sane")
+add_definitions(-DSCANBD_CFG_DIR="/etc/scanbd/")
 
 add_subdirectory(external/confusepp)
 add_subdirectory(external/sanepp)

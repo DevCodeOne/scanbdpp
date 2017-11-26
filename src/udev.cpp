@@ -1,5 +1,5 @@
-#include "common.h"
 #include "udev.h"
+#include "common.h"
 
 #include <chrono>
 #include <thread>
@@ -21,15 +21,15 @@ namespace scanbdpp {
                     auto device = device_monitor.receive_device();
 
                     if (device) {
-                        if (device->get_device_type() == device_type) {
-                            if (device->get_action() == add_action) {
+                        if (device->get_device_type() == Constants::device_type) {
+                            if (device->get_action() == Constants::add_action) {
                                 device_events.device_added();
-                            } else if (device->get_action() == remove_action) {
+                            } else if (device->get_action() == Constants::remove_action) {
                                 device_events.device_removed();
                             }
                         }
                     } else {
-                        std::this_thread::sleep_for(no_device_sleep);
+                        std::this_thread::sleep_for(Constants::no_device_sleep);
                     }
                 }
             }

@@ -26,7 +26,7 @@ namespace scanbdpp {
         std::vector<char *> environment_variables;
 
         std::string current_env = "PATH";
-        std::experimental::filesystem::path root = "global";
+        confusepp::path root = Config::Constants::global;
 
         if (getenv(current_env.c_str())) {
             environment_variables.emplace_back(strdup(getenv(current_env.c_str())));
@@ -112,9 +112,15 @@ namespace scanbdpp {
         }
     }
 
-    void DeviceEvents::hook_device_insert(const std::string &device_name) { hook_device_ex("", "insert", device_name); }
+    void DeviceEvents::hook_device_insert(const std::string &device_name) {
+        // hook_device_insert
+        hook_device_ex(Config::Constants::device_insert_script, "insert", device_name);
+    }
 
-    void DeviceEvents::hook_device_remove(const std::string &device_name) { hook_device_ex("", "remove", device_name); }
+    void DeviceEvents::hook_device_remove(const std::string &device_name) {
+        // hook_device_remove
+        hook_device_ex(Config::Constants::device_remove_script, "remove", device_name);
+    }
 
     void DeviceEvents::device_added() {
         SaneHandler sane;
