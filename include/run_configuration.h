@@ -11,7 +11,7 @@ namespace scanbdpp {
         bool signal() const;
         bool debug() const;
         int debug_level() const;
-        std::experimental::filesystem::path config_path() const;
+        const std::experimental::filesystem::path &config_path() const;
 
         RunConfiguration &manager_mode(bool value);
         RunConfiguration &foreground(bool value);

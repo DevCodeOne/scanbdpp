@@ -1,5 +1,7 @@
 #include <memory>
 
+#include "spdlog/spdlog.h"
+
 #include "config.h"
 #include "run_configuration.h"
 
@@ -55,13 +57,35 @@ namespace scanbdpp {
                 .values(Option<std::string>(Constants::filter).default_value("^fujitsu.*"),
                         Option<std::string>(Constants::desc).default_value(Constants::desc_def), action_structure,
                         function_structure),
-            Function(Constants::include, cfg_include)};
+            Function(Constants::include, include_relative)};
 
         auto conf = confusepp::Config::parse(run_config.config_path(), std::move(config_structure));
 
         if (conf) {
             _config = std::make_unique<confusepp::Config>(std::move(*conf));
+        } else {
+            if (!std::experimental::filesystem::exists(run_config.config_path())) {
+                spdlog::get("logger")->critical("The provided config doesn't exist");
+            } else {
+                spdlog::get("logger")->critical("Config failed to parse");
+            }
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+            exit(EXIT_FAILURE);
         }
+    }
+
+    int Config::include_relative(cfg_t *handle, cfg_opt_t *opt, int argc, const char **argv) {
+        static bool searchpath_added = false;
+
+        if (!searchpath_added) {
+            auto directory = run_config.config_path();
+            directory.remove_filename();
+
+            cfg_add_searchpath(handle, directory.c_str());
+            searchpath_added = true;
+        }
+
+        return cfg_include(handle, opt, argc, argv);
     }
 
     // TODO check if method does the correct thing
@@ -73,18 +97,21 @@ namespace scanbdpp {
         if (script_path.is_absolute()) {
             absolute_path = script_path;
         } else {
-            if (conf) {
-                auto script_dir = conf.get<confusepp::Option<std::string>>(Config::Constants::script_dir);
-                if (script_dir) {
-                    confusepp::path script_dir_path = script_dir->value();
-                    if (script_dir_path.empty() == 0) {
-                        absolute_path = SCANBD_CFG_DIR / script_path;
-                    } else if (script_dir_path.is_absolute()) {
-                        absolute_path = script_dir_path / script_path;
-                    } else {
-                        absolute_path = confusepp::path(SCANBD_CFG_DIR) / script_dir_path / script_path;
-                    }
-                }
+            auto script_dir = conf.get<confusepp::Option<std::string>>(Config::Constants::script_dir);
+
+            if (!script_dir) {
+                auto directory = run_config.config_path();
+                directory.remove_filename();
+                script_dir = confusepp::Option<std::string>(directory.c_str());
+            }
+
+            confusepp::path script_dir_path = script_dir->value();
+            if (script_dir_path.empty() == 0) {
+                absolute_path = SCANBD_CFG_DIR / script_path;
+            } else if (script_dir_path.is_absolute()) {
+                absolute_path = script_dir_path / script_path;
+            } else {
+                absolute_path = confusepp::path(SCANBD_CFG_DIR) / script_dir_path / script_path;
             }
         }
 

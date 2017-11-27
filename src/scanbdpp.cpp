@@ -7,12 +7,13 @@
 #include <sys/wait.h>
 
 #include <chrono>
+#include <iostream>
 #include <cstdlib>
 #include <fstream>
-#include <iostream>
 #include <thread>
 
 #include "cxxopts.hpp"
+#include "spdlog/spdlog.h"
 
 #include "config.h"
 #include "daemonize.h"
@@ -22,14 +23,18 @@
 #include "udev.h"
 
 int main(int argc, char *argv[]) {
+    // TODO remove these later
     using namespace scanbdpp;
     using namespace cxxopts;
     using confusepp::List;
     using confusepp::Option;
 
+    auto logger = spdlog::stdout_color_mt("logger");
+
     cxxopts::Options options("scanbd", "scanbd is a scanner button daemon");
 
-    options.add_options()("m,manager", "start in manager mode")
+    options.add_options()
+        ("m,manager", "start in manager mode")
         ("s,signal", "start in signal mode")
         ("d,debug", "enable debugging", cxxopts::value<int>())
         ("f,foreground", "start in foreground")
@@ -66,30 +71,26 @@ int main(int argc, char *argv[]) {
         if (options.count("action")) {
         }
     } catch (cxxopts::option_not_exists_exception e) {
-        std::cout << e.what() << '\n' << options.help() << std::endl;
+        spdlog::get("logger")->critical("Option does not exist");
+        spdlog::get("logger")->critical(e.what());
         return EXIT_FAILURE;
     } catch (cxxopts::option_requires_argument_exception e) {
-        std::cout << e.what() << std::endl;
+        spdlog::get("logger")->critical("Option requires an argument");
+        spdlog::get("logger")->critical(e.what());
         return EXIT_FAILURE;
     } catch (cxxopts::argument_incorrect_type e) {
-        std::cout << "The provided argument is of the wrong type" << std::endl;
+        spdlog::get("logger")->critical("The argument provided for the option is invalid");
+        spdlog::get("logger")->critical(e.what());
         return EXIT_FAILURE;
     }
 
-    // Config config;
+    Config config;
     // SaneHandler sane;
     // UDevHandler udev;
-    QueueHandler queue;
 
     // queue.start();
-    queue.start();
-
-    std::this_thread::sleep_for(std::chrono::seconds(10));
-
-    queue.stop();
 
     // queue.stop();
-
 
     // if (auto value = config.get<Option<int>>("/global/debug"); value) {
     //     run_config.debug(run_config.debug() | value->value());

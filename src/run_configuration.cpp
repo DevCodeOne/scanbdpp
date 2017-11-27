@@ -12,7 +12,7 @@ namespace scanbdpp {
 
     int RunConfiguration::debug_level() const { return m_debug_level; }
 
-    std::experimental::filesystem::path RunConfiguration::config_path() const { return m_config_path; }
+    const std::experimental::filesystem::path &RunConfiguration::config_path() const { return m_config_path; }
 
     RunConfiguration &RunConfiguration::manager_mode(bool value) {
         m_manager_mode = value;

@@ -19,11 +19,6 @@ namespace scanbdpp {
 
         explicit operator bool() const;
 
-       private:
-        inline static std::unique_ptr<confusepp::Config> _config;
-        inline static std::mutex _config_mutex;
-
-       public:
         class Constants final {
            public:
             Constants() = delete;
@@ -108,15 +103,27 @@ namespace scanbdpp {
 
             static inline const confusepp::path include = C_INCLUDE;
         };
+
+       private:
+        static int include_relative(cfg_t *handle, cfg_opt_t *, int argc, const char **argv);
+
+        inline static std::unique_ptr<confusepp::Config> _config;
+        inline static std::mutex _config_mutex;
     };
 
     template<typename T>
     std::optional<T> Config::get(const confusepp::path& element_path) const {
         std::lock_guard<std::mutex> config_guard{_config_mutex};
+
+        if (!_config) {
+            return std::optional<T>{};
+        }
+
         auto ret = _config->get<T>(element_path);
 
         return ret;
     }
 
-    std::experimental::filesystem::path make_script_path_absolute(const std::experimental::filesystem::path &script_path);
+    std::experimental::filesystem::path make_script_path_absolute(
+        const std::experimental::filesystem::path& script_path);
 }  // namespace scanbdpp
