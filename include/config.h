@@ -105,8 +105,6 @@ namespace scanbdpp {
         };
 
        private:
-        static int include_relative(cfg_t *handle, cfg_opt_t *, int argc, const char **argv);
-
         inline static std::unique_ptr<confusepp::Config> _config;
         inline static std::mutex _config_mutex;
     };

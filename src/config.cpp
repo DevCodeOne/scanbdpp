@@ -57,7 +57,7 @@ namespace scanbdpp {
                 .values(Option<std::string>(Constants::filter).default_value("^fujitsu.*"),
                         Option<std::string>(Constants::desc).default_value(Constants::desc_def), action_structure,
                         function_structure),
-            Function(Constants::include, include_relative)};
+            Function(Constants::include, cfg_include)};
 
         auto conf = confusepp::Config::parse(run_config.config_path(), std::move(config_structure));
 
@@ -72,20 +72,6 @@ namespace scanbdpp {
             std::this_thread::sleep_for(std::chrono::milliseconds(5000));
             exit(EXIT_FAILURE);
         }
-    }
-
-    int Config::include_relative(cfg_t *handle, cfg_opt_t *opt, int argc, const char **argv) {
-        static bool searchpath_added = false;
-
-        if (!searchpath_added) {
-            auto directory = run_config.config_path();
-            directory.remove_filename();
-
-            cfg_add_searchpath(handle, directory.c_str());
-            searchpath_added = true;
-        }
-
-        return cfg_include(handle, opt, argc, argv);
     }
 
     // TODO check if method does the correct thing
