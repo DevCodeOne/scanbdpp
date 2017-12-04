@@ -34,7 +34,9 @@ namespace scanbdpp {
     }
 
     // TODO implement
-    void SignalHandler::sig_term_handler(int) {}
+    void SignalHandler::sig_term_handler(int) { _should_exit = true; }
+
+    const std::atomic_bool &SignalHandler::should_exit() const { return _should_exit; }
 
     void SignalHandler::install() {
         if (_installed_signal_handlers) {

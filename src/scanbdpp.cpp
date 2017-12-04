@@ -2,7 +2,6 @@
 
 #include <grp.h>
 #include <pwd.h>
-#include <signal.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -20,7 +19,10 @@
 #include "pipe.h"
 #include "run_configuration.h"
 #include "sane.h"
+#include "signal_handler.h"
 #include "udev.h"
+
+void die(int exit_code) { exit(exit_code); }
 
 int main(int argc, char *argv[]) {
     // TODO remove these later
@@ -76,7 +78,7 @@ int main(int argc, char *argv[]) {
 
             handler.write_message(message);
 
-            exit(EXIT_SUCCESS);
+            die(EXIT_SUCCESS);
         } else if ((options.count("trigger") == 1) ^ (options.count("action") == 1)) {
             if (options.count("trigger") == 0) {
                 std::cout << "No device was specified to trigger" << std::endl;
@@ -86,271 +88,278 @@ int main(int argc, char *argv[]) {
                 std::cout << "No action was specified to execute" << std::endl;
             }
 
-            exit(EXIT_FAILURE);
+            die(EXIT_FAILURE);
         }
 
     } catch (cxxopts::option_not_exists_exception e) {
         std::cout << "Option does not exist" << '\n' << e.what() << std::endl;
-        exit(EXIT_FAILURE);
+        return (EXIT_FAILURE);
     } catch (cxxopts::option_requires_argument_exception e) {
         std::cout << "Option requires an argument" << '\n' << e.what() << std::endl;
-        exit(EXIT_FAILURE);
+        return (EXIT_FAILURE);
     } catch (cxxopts::argument_incorrect_type e) {
         std::cout << "The argument provided for the option is of wrong type" << '\n' << e.what() << std::endl;
-        exit(EXIT_FAILURE);
+        return (EXIT_FAILURE);
     }
 
     Config config;
-
     PipeHandler pipe;
+    SaneHandler sane;
+    UDevHandler udev;
+    SignalHandler signals;
+    signals.install();
 
-    pipe.start();
+    if (auto value = config.get<Option<int>>(Config::Constants::global / Config::Constants::debug); value) {
+        run_config.debug(run_config.debug() | value->value());
+    }
 
-    std::this_thread::sleep_for(std::chrono::seconds(20));
+    if (run_config.debug()) {
+        if (auto value = config.get<Option<int>>(Config::Constants::global / Config::Constants::debug_level); value) {
+            run_config.debug_level(value->value());
+        }
+    }
 
-    pipe.stop();
+    using namespace std::string_literals;
+    if ("scanbm"s == argv[0]) {
+        run_config.manager_mode(true);
+    }
 
-    // SaneHandler sane;
-    // UDevHandler udev;
+    if (run_config.manager_mode()) {
+        pid_t scanbd_pid = -1;
+        auto scanbd_pid_path = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::saned);
 
-    // if (auto value = config.get<Option<int>>("/global/debug"); value) {
-    //     run_config.debug(run_config.debug() | value->value());
-    // }
+        if (!scanbd_pid_path) {
+            // TODO assert or something similiar
+        }
 
-    // if (run_config.debug()) {
-    //     if (auto value = config.get<Option<int>>("/global/debug_level"); value) {
-    //         run_config.debug_level(value->value());
-    //     }
-    // }
+        if (run_config.signal()) {
+            std::ifstream scanbd_pid_file(scanbd_pid_path->value());
 
-    // using namespace std::string_literals;
-    // if ("scanbm"s == argv[0]) {
-    //     run_config.manager_mode(true);
-    // }
+            if (!scanbd_pid_file) {
+                // Can't read from pid-file
+            }
 
-    // if (run_config.manager_mode()) {
-    //     pid_t scanbd_pid = -1;
-    //     auto scanbd_pid_path = config.get<Option<std::string>>("global/saned");
+            scanbd_pid_file >> scanbd_pid;
 
-    //     if (!scanbd_pid_path) {
-    //         // TODO assert or something similiar
-    //     }
+            if (kill(scanbd_pid, SIGUSR1) < 0) {
+                // Can't send Signal
+                spdlog::get("logger")->critical("Can't send signal to stop polling threads");
+                die(EXIT_FAILURE);
+            }
 
-    //     if (run_config.signal()) {
-    //         std::ifstream scanbd_pid_file(scanbd_pid_path->value());
+            std::this_thread::sleep_for(std::chrono::seconds(1));
+        } else {
+            spdlog::get("logger")->critical("Dbus is not supported");
+            die(EXIT_FAILURE);
+        }
 
-    //         if (!scanbd_pid_file) {
-    //             // Can't read from pid-file
-    //         }
+        if (pid_t spid = fork(); spid < 0) {
+            spdlog::get("logger")->critical("Couldn't fork");
+            die(EXIT_FAILURE);
+        } else if (spid > 0) {
+            int status = 0;
 
-    //         scanbd_pid_file >> scanbd_pid;
+            if (waitpid(spid, &status, 0) < 0) {
+                spdlog::get("logger")->critical("Waiting for saned failed");
+                die(EXIT_FAILURE);
+            }
 
-    //         if (kill(scanbd_pid, SIGUSR1) < 0) {
-    //             // Can't send Signal
-    //             exit(EXIT_FAILURE);
-    //         }
+            if (WIFEXITED(status)) {
+                spdlog::get("logger")->info("Sane exited normally");
+            }
+            if (WIFSIGNALED(status)) {
+                spdlog::get("logger")->info("Sane exited due to signal");
+            }
 
-    //         using namespace std::chrono_literals;
-    //         std::this_thread::sleep_for(1s);
-    //     } else {
-    //         // TODO Implement dbus backend
-    //     }
+            if (run_config.signal()) {
+                using namespace std::chrono_literals;
+                std::this_thread::sleep_for(1s);
 
-    //     if (pid_t spid = fork(); spid < 0) {
-    //         // Couldn't fork
-    //         exit(EXIT_FAILURE);
-    //     } else if (spid > 0) {
-    //         int status = 0;
+                if (scanbd_pid > 0) {
+                    if (kill(scanbd_pid, SIGUSR2) < 0) {
+                        // Can't send signal
+                        spdlog::get("logger")->critical("Can't send signal to start polling threads");
+                    }
+                }
+            } else {
+                spdlog::get("logger")->critical("Dbus is not supported");
+                die(EXIT_FAILURE);
+            }
+        } else {
+            std::string saned;
+            if (auto value = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::saned);
+                value) {
+                saned = value->value();
+            } else {
+                spdlog::get("logger")->critical("Path to saned is not set");
+                die(EXIT_FAILURE);
+            }
+            if (getenv("LISTEND_PID") != nullptr) {
+                std::string listen_fds = std::to_string((long)getpid());
+                setenv("LISTEN_PID", listen_fds.c_str(), 1);
+                spdlog::get("logger")->info("Systemd detected: Updating LISTEN_PID env. variable");
+            }
 
-    //         if (waitpid(spid, &status, 0) < 0) {
-    //             // Waiting for saned failed
-    //             exit(EXIT_FAILURE);
-    //         }
+            if (auto env_list =
+                    config.get<Option<List<std::string>>>(Config::Constants::global / Config::Constants::saned_envs);
+                env_list) {
+                for (auto env : env_list->value()) {
+                    std::istringstream env_stream(env);
 
-    //         if (WIFEXITED(status)) {
-    //             // Sane exited with status
-    //         }
-    //         if (WIFSIGNALED(status)) {
-    //             // Sane exited due to signal
-    //         }
+                    std::string variable;
+                    std::string value;
+                    if (std::getline(env_stream, variable, '=') && std::getline(env_stream, value, '=')) {
+                        if (setenv(variable.c_str(), value.c_str(), 1) < 0) {
+                            spdlog::get("logger")->critical("Couldn't set environment variable");
+                        } else {
+                            spdlog::get("logger")->info("Environment variable were updated");
+                        }
+                    } else {
+                        spdlog::get("logger")->warn("Malformed environment variables in config file");
+                    }
+                }
+            }
 
-    //         if (run_config.signal()) {
-    //             using namespace std::chrono_literals;
-    //             std::this_thread::sleep_for(1s);
+            if (setsid() < 0) {
+                spdlog::get("logger")->critical("Error setting process id group {0}", strerror(errno));
+            }
+            if (execl(saned.c_str(), "saned", nullptr) < 0) {
+                spdlog::get("logger")->critical("execl with saned failed");
+                die(EXIT_FAILURE);
+            }
 
-    //             if (scanbd_pid > 0) {
-    //                 if (kill(scanbd_pid, SIGUSR2) < 0) {
-    //                     // Can't send signal
-    //                 }
-    //             }
-    //         } else {
-    //             // TODO Implement dbus
-    //         }
-    //     } else {
-    //         std::string saned;
-    //         if (auto value = config.get<Option<std::string>>("/global/saned"); value) {
-    //             saned = value->value();
-    //         } else {
-    //             // Saned not set error
-    //             exit(EXIT_FAILURE);
-    //         }
-    //         if (getenv("LISTEND_PID") != nullptr) {
-    //             std::string listen_fds = std::to_string((long)getpid());
-    //             setenv("LISTEN_PID", listen_fds.c_str(), 1);
-    //             // Systemd detected: Updating LISTEN_PID env. variable
-    //         }
+            die(EXIT_FAILURE);
+        }
+    } else {
+        if (!run_config.foreground()) {
+            spdlog::get("logger")->info("Daemonizing scanbd");
+            daemonize();
+        }
 
-    //         if (auto env_list = config.get<Option<List<std::string>>>("/global/saned_env"); env_list) {
-    //             for (auto env : env_list->value()) {
-    //                 std::istringstream env_stream(env);
+        std::string euser = "";
+        std::string egroup = "";
+        if (auto value = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::user); value) {
+            euser = value->value();
+        }
+        if (auto value = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::group); value) {
+            egroup = value->value();
+        }
 
-    //                 std::string variable;
-    //                 std::string value;
-    //                 if (std::getline(env_stream, variable, '=') && std::getline(env_stream, value, '=')) {
-    //                     if (setenv(variable.c_str(), value.c_str(), 1) < 0) {
-    //                         // Couldn't set environment variable
-    //                     } else {
-    //                         // Did set evironment variable
-    //                     }
-    //                 } else {
-    //                     // Malformend env
-    //                 }
-    //             }
-    //         }
+        using namespace std::string_literals;
+        if (euser == ""s || egroup == ""s) {
+            spdlog::get("logger")->critical("No user or group defined");
+        }
 
-    //         if (setsid() < 0) {
-    //             // setsid : Error
-    //         }
-    //         if (execl(saned.c_str(), "saned", nullptr) < 0) {
-    //             // exec of sane failed
-    //             exit(EXIT_FAILURE);
-    //         }
+        spdlog::get("logger")->info("Dropping privileges to uid");
+        struct passwd *pwd = getpwnam(euser.c_str());
 
-    //         // Not reached
-    //         exit(EXIT_FAILURE);
-    //     }
-    // } else {
-    //     if (!run_config.foreground()) {
-    //         // daemonize
-    //         daemonize();
-    //     }
+        if (pwd == nullptr) {
+            if (errno != 0) {
+                spdlog::get("logger")->critical("No user {0} {1}", euser, strerror(errno));
+            } else {
+                spdlog::get("logger")->critical("No user {0}", euser);
+            }
+            die(EXIT_FAILURE);
+        }
 
-    //     std::string euser = "";
-    //     std::string egroup = "";
-    //     if (auto value = config.get<Option<std::string>>("/global/user"); value) {
-    //         euser = value->value();
-    //     }
-    //     if (auto value = config.get<Option<std::string>>("/global/group"); value) {
-    //         egroup = value->value();
-    //     }
+        spdlog::get("logger")->info("Dropping privileges to gid");
+        struct group *grp = getgrnam(egroup.c_str());
 
-    //     using namespace std::string_literals;
-    //     if (euser == ""s || egroup == ""s) {
-    //         // Error no user or group defined
-    //     }
+        if (grp == nullptr) {
+            if (errno != 0) {
+                spdlog::get("logger")->critical("No group {0} {1}", egroup, strerror(errno));
+            } else {
+                spdlog::get("logger")->critical("No group {0}", egroup);
+            }
+            die(EXIT_FAILURE);
+        }
 
-    //     // Dropping privileges to uid
-    //     struct passwd *pwd = getpwnam(euser.c_str());
+        std::string scanbd_pid_path = "";
 
-    //     if (pwd == nullptr) {
-    //         if (errno != 0) {
-    //             // No user + errno
-    //         } else {
-    //             // No user
-    //         }
-    //         exit(EXIT_FAILURE);
-    //     }
+        if (auto value = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::pidfile)) {
+            scanbd_pid_path = value->value();
+        }
 
-    //     // Dropping privileges to gid
-    //     struct group *grp = getgrnam(egroup.c_str());
+        if (!run_config.foreground()) {
+            int pid_fd =
+                open(scanbd_pid_path.c_str(), O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
 
-    //     if (grp == nullptr) {
-    //         if (errno != 0) {
-    //             // No group + errno
-    //         } else {
-    //             // No group
-    //         }
-    //         exit(EXIT_FAILURE);
-    //     }
+            if (pid_fd < 0) {
+                spdlog::get("logger")->critical("Couldn't create pidfile {0}", strerror(errno));
+                die(EXIT_FAILURE);
+            }
 
-    //     std::string scanbd_pid_path = "";
+            if (ftruncate(pid_fd, 0) < 0) {
+                spdlog::get("logger")->critical("Couldn't clear pidfile {0}", strerror(errno));
+                die(EXIT_FAILURE);
+            }
+            std::string pid_string = std::to_string(getpid()).c_str();
+            if (write(pid_fd, pid_string.c_str(), pid_string.size()) < 0) {
+                spdlog::get("logger")->critical("Couldn't write to pidfile {0}", strerror(errno));
+                die(EXIT_FAILURE);
+            }
 
-    //     if (auto value = config.get<Option<std::string>>("/global/pidfile")) {
-    //         scanbd_pid_path = value->value();
-    //     }
+            if (close(pid_fd) < 0) {
+                spdlog::get("logger")->critical("Couldn't close pidfile {0}", strerror(errno));
+                die(EXIT_FAILURE);
+            }
 
-    //     if (!run_config.foreground()) {
-    //         int pid_fd =
-    //             open(scanbd_pid_path.c_str(), O_RDWR | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+            if (chown(scanbd_pid_path.c_str(), pwd->pw_uid, grp->gr_gid) < 0) {
+                spdlog::get("logger")->critical("Couldn't chown pidfile {0}", strerror(errno));
+                die(EXIT_FAILURE);
+            }
+        }
 
-    //         if (pid_fd < 0) {
-    //             // Couldn't create pidfile
-    //             exit(EXIT_FAILURE);
-    //         }
+        if (grp != nullptr) {
+            unsigned int index = 0;
+            while (grp->gr_mem[index]) {
+                if (index == 0) {
+                    spdlog::get("logger")->info("Group {0} has member : ", grp->gr_name);
+                }
+                spdlog::get("logger")->info("{0}", grp->gr_mem[index]);
+                ++index;
+            }
+            spdlog::get("logger")->info("Dropping privileges to gid: {0}", grp->gr_gid);
+            if (setegid(grp->gr_gid) < 0) {
+                spdlog::get("logger")->warn("Couldn't set the effective gid to {0}", grp->gr_gid);
+            } else {
+                spdlog::get("logger")->info("Running as effective gid {0}", grp->gr_gid);
+            }
+        }
 
-    //         if (ftruncate(pid_fd, 0) < 0) {
-    //             // Couldn't clear pidfile
-    //             exit(EXIT_FAILURE);
-    //         }
-    //         std::string pid_string = std::to_string(getpid()).c_str();
-    //         if (write(pid_fd, pid_string.c_str(), pid_string.size()) < 0) {
-    //             // Couldn't write to pidfile
-    //             exit(EXIT_FAILURE);
-    //         }
+        if (pwd != nullptr) {
+            spdlog::get("logger")->info("Dropping privileges to uid: {0}", pwd->pw_uid);
+            if (seteuid(pwd->pw_uid) < 0) {
+                setgroups(0, nullptr);
+                spdlog::get("logger")->warn("Couldn't set effective uid to {0}", pwd->pw_uid);
+            } else {
+                spdlog::get("logger")->info("Running as effective uid {0}", grp->gr_gid);
+            }
+        }
 
-    //         if (close(pid_fd) < 0) {
-    //             // Couldn't close pidfile
-    //             exit(EXIT_FAILURE);
-    //         }
+        if (getenv("SANE_CONFIG_DIR") != nullptr) {
+            // SANE_CONFIG_DIR = (SANE_CONFIG_DIR)
+        } else {
+            spdlog::get("logger")->warn("SANE_CONFIG_DIR not set");
+        }
 
-    //         if (chown(scanbd_pid_path.c_str(), pwd->pw_uid, grp->gr_gid) < 0) {
-    //             // Can't chown pidfile
-    //             exit(EXIT_FAILURE);
-    //         }
-    //     }
+        sane.start();
+        udev.start();
+        pipe.start();
 
-    //     unsigned int index = 0;
+        while (true) {
+            if (signals.should_exit()) {
+                spdlog::get("logger")->info("Exiting scanbd");
+                sane.stop();
+                udev.stop();
+                pipe.stop();
+                die(EXIT_SUCCESS);
+            }
 
-    //     if (grp != nullptr) {
-    //         while (grp->gr_mem) {
-    //             if (index == 0) {
-    //                 // Group has member grp->gr_name
-    //             }
-    //             // grp->gr_mem[index]
-    //             ++index;
-    //         }
-    //         // Drop privileges to gid (grp->gr_gid)
-    //         if (setegid(grp->gr_gid) < 0) {
-    //             // Coulnd't set the effective gid (grp->gr_gid)
-    //         } else {
-    //             // Running as effective gid (grp->gr_gid)
-    //         }
-    //     }
-
-    //     if (pwd != nullptr) {
-    //         // Drop privileges to uid
-    //         if (seteuid(pwd->pw_uid) < 0) {
-    //             setgroups(0, nullptr);
-    //             // Couldn't set the effective uid to pwd->pw_uid
-    //         } else {
-    //             // Running as effective uid pwd->pw_uid
-    //         }
-    //     }
-
-    //     if (getenv("SANE_CONFIG_DIR") != nullptr) {
-    //         // SANE_CONFIG_DIR = (SANE_CONFIG_DIR)
-    //     } else {
-    //         // SANE_CONFIG_DIR not set
-    //     }
-
-    //     sane.start();
-    //     udev.start();
-
-    //     while (true) {
-    //         if (pause() < 0) {
-    //             // Pause (strerror)
-    //         }
-    //     }
-    // }
-    // return EXIT_SUCCESS;
+            if (pause() < 0) {
+                spdlog::get("logger")->warn("pause() error {0}", strerror(errno));
+            }
+        }
+    }
+    return EXIT_SUCCESS;
 }

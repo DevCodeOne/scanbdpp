@@ -2,6 +2,7 @@
 
 #include "common.h"
 
+#include <atomic>
 #include <cstring>
 #include <initializer_list>
 
@@ -11,6 +12,7 @@ namespace scanbdpp {
     class SignalHandler {
        public:
         void install();
+        const std::atomic_bool &should_exit() const;
 
        private:
         static void sig_hup_handler(int);
@@ -21,6 +23,7 @@ namespace scanbdpp {
         int install_signal(int signal, const T &signal_function, const std::initializer_list<int> &blocked_signals);
 
         static inline bool _installed_signal_handlers = false;
+        static inline std::atomic_bool _should_exit = false;
     };
 
     template<typename T>

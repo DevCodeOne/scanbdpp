@@ -31,9 +31,11 @@ namespace scanbdpp {
                 .values(
                     Option<std::string>(Constants::filter),
                     Section(Constants::numerical_trigger)
-                        .values(Option<int>(Constants::from_value), Option<int>(Constants::to_value)),
+                        .values(Option<int>(Constants::from_value).default_value(Constants::from_value_def_int),
+                                Option<int>(Constants::to_value).default_value(Constants::to_value_def_int)),
                     Section(Constants::string_trigger)
-                        .values(Option<std::string>(Constants::from_value), Option<std::string>(Constants::to_value)),
+                        .values(Option<std::string>(Constants::from_value).default_value(Constants::from_value_def_str),
+                                Option<std::string>(Constants::to_value).default_value(Constants::to_value_def_str)),
                     Option<std::string>(Constants::desc), Option<std::string>(Constants::script));
         auto function_structure =
             Multisection(Constants::function)

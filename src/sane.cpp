@@ -6,7 +6,9 @@
 #include <regex>
 #include <thread>
 
-#include "signal.h"
+#include <signal.h>
+
+#include <spdlog/spdlog.h>
 
 #include "sane.h"
 #include "sanepp.h"
@@ -138,7 +140,7 @@ namespace scanbdpp {
                     try {
                         function_regex.assign(filter->value(), std::regex_constants::extended);
                     } catch (std::regex_error) {
-                        // Couldn't compile regex
+                        spdlog::get("logger")->critical("Couldn't compile regex");
                         regex_is_valid = false;
                     }
 
@@ -281,7 +283,7 @@ namespace scanbdpp {
                         if (current_option.value_as_variant()) {
                             std::visit(init_range_values, *current_option.value_as_variant());
                         } else {
-                            // Error can't get value of current option
+                            spdlog::get("logger")->critical("Couldn't get value of current option");
                         }
                     }
                 }
@@ -298,7 +300,7 @@ namespace scanbdpp {
         auto device = device_info().open();
 
         if (!device) {
-            // Error couldn't open device
+            spdlog::get("logger")->critical("Couldn't open device {0}", device_info().name());
             return;
         }
 
@@ -306,7 +308,7 @@ namespace scanbdpp {
         auto global_section = config.get<confusepp::Section>(Config::Constants::global);
 
         if (!global_section) {
-            // Config is invalid
+            spdlog::get("logger")->critical("Config is invalid");
             return;
         }
 
@@ -330,7 +332,7 @@ namespace scanbdpp {
                     continue;
                 }
 
-                if (!std::regex_match(device_info().name().data(), device_regex)) {
+                if (!std::regex_match(device_info().name(), device_regex)) {
                     continue;
                 }
 
@@ -340,64 +342,76 @@ namespace scanbdpp {
                     continue;
                 }
 
-                // Found local actions for device
+                spdlog::get("logger")->info("Found local actions for device {0}", device_info().name());
 
                 find_matching_options(*device, device_section);
                 find_matching_options(*device, device_section);
             }
         }
 
-        int timeout = config.get<confusepp::Option<int>>(Config::Constants::timeout)->value();
+        int timeout =
+            config.get<confusepp::Option<int>>(Config::Constants::global / Config::Constants::timeout)->value();
 
-        // Start the polling for device
+        spdlog::get("logger")->info("Start polling for device {0}", device_info().name());
         while (!m_terminate) {
-            // polling device
+            // spdlog::get("logger")->info("Polling device {0}", device_info().name());
             for (auto current_action : m_actions) {
-                auto current_value = device->find_option(current_action.m_option_info);
+                auto current_value = device->find_option(current_action.m_option_info)->value_as_variant();
 
-                if (!current_value && current_value->value_as_variant()) {
-                    // Error can't get current value of option
+                if (!current_value) {
+                    spdlog::get("logger")->warn("Couldn't get current value of option {0} of device {1}",
+                                                current_action.m_option_info.name(), device_info().name());
                     continue;
                 }
 
                 if (!current_action.m_last_value) {
-                    current_action.m_last_value = current_value->value_as_variant();
+                    current_action.m_last_value = current_value;
                 }
 
                 auto has_value_changed = [&current_action](const auto &current_value) -> bool {
                     using type = std::decay_t<decltype(current_value)>;
 
                     if (!std::holds_alternative<type>(*current_action.m_last_value)) {
-                        // Type of action has changed shouldn't happen
+                        spdlog::get("logger")->critical("Type of action has changed should never happen");
                         return false;
                     }
 
                     if constexpr (std::is_same_v<type, int> || std::is_same_v<type, std::string> ||
                                   std::is_same_v<type, sanepp::Fixed> || std::is_same_v<type, bool>) {
-                        return std::get<ActionValue<type>>(current_action.m_from_value) == current_value &&
-                               std::get<ActionValue<type>>(current_action.m_to_value) ==
+                        return std::get<ActionValue<type>>(current_action.m_to_value) == current_value &&
+                               std::get<ActionValue<type>>(current_action.m_from_value) ==
                                    std::get<type>(current_action.m_last_value.value());
                     } else {
-                        // Action has invalid type shouldn't happen
+                        spdlog::get("logger")->critical("Action has invalid type should never happen");
                     }
                     return false;
                 };
 
-                bool value_changed = std::visit(has_value_changed, *current_value->value_as_variant());
+                bool value_changed = std::visit(has_value_changed, *current_value);
+                current_action.m_last_value = current_value;
 
                 // TODO Handle script, also add event triggers that can be triggered from outside the thread
                 if (value_changed) {
                     // Destroys current value of the optional thus freeing the resource (the device that the optional
                     // holds)
+                    spdlog::get("logger")->info("Closing device {0}", device_info().name());
                     device.reset();
 
+                    spdlog::get("logger")->info("Start script for device {0}", device_info().name());
                     // TODO start script
 
                     // Reopen device
-                    device = m_device_info.open();
+                    spdlog::get("logger")->info("Reopen device {0}", device_info().name());
+                    device = device_info().open();
+
+                    if (!device) {
+                        spdlog::get("logger")->critical("Couldn't reopen device");
+                        return;
+                    }
+
+                    current_action.m_last_value.reset();
                 }
 
-                current_action.m_last_value = current_value->value_as_variant();
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));

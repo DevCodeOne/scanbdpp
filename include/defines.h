@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO correct paths for pipe and pid file
+
 #define PIPE_PATH "scanbd.pipe"
 
 #define SANE_REINIT_TIMEOUT 3
@@ -74,7 +76,7 @@
 #define C_TIMEOUT_DEF 500
 
 #define C_PIDFILE "pidfile"
-#define C_PIDFILE_DEF "/var/run/scanbd.pid"
+#define C_PIDFILE_DEF "scanbd.pid"
 
 #define C_ENVIRONMENT "environment"
 
