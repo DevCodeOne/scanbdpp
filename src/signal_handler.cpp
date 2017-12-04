@@ -33,6 +33,7 @@ namespace scanbdpp {
         sane.start();
     }
 
+    // TODO implement
     void SignalHandler::sig_term_handler(int) {}
 
     void SignalHandler::install() {

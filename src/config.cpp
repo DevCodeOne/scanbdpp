@@ -18,6 +18,8 @@ namespace scanbdpp {
     void Config::reload_config() {
         std::lock_guard<std::mutex> config_guard{_config_mutex};
 
+        RunConfiguration run_config;
+
         if (_config) {
             return;
         }
@@ -78,6 +80,7 @@ namespace scanbdpp {
     std::experimental::filesystem::path make_script_path_absolute(
         const std::experimental::filesystem::path &script_path) {
         Config conf;
+        RunConfiguration run_config;
         std::experimental::filesystem::path absolute_path = "";
 
         if (script_path.is_absolute()) {

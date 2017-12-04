@@ -2,43 +2,67 @@
 
 namespace scanbdpp {
 
-    bool RunConfiguration::manager_mode() const { return m_manager_mode; }
+    bool RunConfiguration::manager_mode() const {
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        return _manager_mode;
+    }
 
-    bool RunConfiguration::foreground() const { return m_foreground; }
+    bool RunConfiguration::foreground() const {
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        return _foreground;
+    }
 
-    bool RunConfiguration::signal() const { return m_signal; }
+    bool RunConfiguration::signal() const {
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        return _signal;
+    }
 
-    bool RunConfiguration::debug() const { return m_debug; }
+    bool RunConfiguration::debug() const {
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        return _debug;
+    }
 
-    int RunConfiguration::debug_level() const { return m_debug_level; }
+    int RunConfiguration::debug_level() const {
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        return _debug_level;
+    }
 
-    const std::experimental::filesystem::path &RunConfiguration::config_path() const { return m_config_path; }
+    const std::experimental::filesystem::path &RunConfiguration::config_path() const {
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        return _config_path;
+    }
 
     RunConfiguration &RunConfiguration::manager_mode(bool value) {
-        m_manager_mode = value;
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        _manager_mode = value;
         return *this;
     }
 
     RunConfiguration &RunConfiguration::foreground(bool value) {
-        m_foreground = value;
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        _foreground = value;
         return *this;
     }
 
     RunConfiguration &RunConfiguration::signal(bool value) {
-        m_signal = value;
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        _signal = value;
         return *this;
     }
     RunConfiguration &RunConfiguration::debug(bool value) {
-        m_debug = value;
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        _debug = value;
         return *this;
     }
     RunConfiguration &RunConfiguration::debug_level(int value) {
-        m_debug_level = value;
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        _debug_level = value;
         return *this;
     }
 
     RunConfiguration &RunConfiguration::config_path(const std::experimental::filesystem::path &config_path) {
-        m_config_path = config_path;
+        std::lock_guard<std::mutex> guard{_instance_mutex};
+        _config_path = config_path;
         return *this;
     }
 

@@ -7,9 +7,9 @@
 #include <sys/wait.h>
 
 #include <chrono>
-#include <iostream>
 #include <cstdlib>
 #include <fstream>
+#include <iostream>
 #include <thread>
 
 #include "cxxopts.hpp"
@@ -17,7 +17,7 @@
 
 #include "config.h"
 #include "daemonize.h"
-#include "queue.h"
+#include "pipe.h"
 #include "run_configuration.h"
 #include "sane.h"
 #include "udev.h"
@@ -30,18 +30,21 @@ int main(int argc, char *argv[]) {
     using confusepp::Option;
 
     auto logger = spdlog::stdout_color_mt("logger");
+    RunConfiguration run_config;
 
     cxxopts::Options options("scanbd", "scanbd is a scanner button daemon");
 
+    // clang-format off
     options.add_options()
         ("m,manager", "start in manager mode")
         ("s,signal", "start in signal mode")
         ("d,debug", "enable debugging", cxxopts::value<int>())
         ("f,foreground", "start in foreground")
         ("c,config", "provide custom config file", cxxopts::value<std::string>())
-        ("t,trigger", "add trigger for device", cxxopts::value<int>())
-        ("a,action", "trigger action number", cxxopts::value<int>())
+        ("t,trigger", "which device to trigger (use in combination with action)", cxxopts::value<std::string>())
+        ("a,action", "which action to use", cxxopts::value<std::string>())
         ("h,help", "print this help menu");
+    // clang-format on
 
     try {
         options.parse(argc, argv);
@@ -63,34 +66,52 @@ int main(int argc, char *argv[]) {
             run_config.config_path(options["config"].as<std::string>());
         }
 
-        // TODO implement
-        if (options.count("trigger")) {
+        // TODO check if trigger or device is number for legacy support
+        if (options.count("trigger") && options.count("action")) {
+            PipeHandler handler;
+
+            std::string device = options["trigger"].as<std::string>();
+            std::string action = options["action"].as<std::string>();
+            std::string message = device + ", " + action;
+
+            handler.write_message(message);
+
+            exit(EXIT_SUCCESS);
+        } else if ((options.count("trigger") == 1) ^ (options.count("action") == 1)) {
+            if (options.count("trigger") == 0) {
+                std::cout << "No device was specified to trigger" << std::endl;
+            }
+
+            if (options.count("action") == 0) {
+                std::cout << "No action was specified to execute" << std::endl;
+            }
+
+            exit(EXIT_FAILURE);
         }
 
-        // TODO implement
-        if (options.count("action")) {
-        }
     } catch (cxxopts::option_not_exists_exception e) {
-        spdlog::get("logger")->critical("Option does not exist");
-        spdlog::get("logger")->critical(e.what());
-        return EXIT_FAILURE;
+        std::cout << "Option does not exist" << '\n' << e.what() << std::endl;
+        exit(EXIT_FAILURE);
     } catch (cxxopts::option_requires_argument_exception e) {
-        spdlog::get("logger")->critical("Option requires an argument");
-        spdlog::get("logger")->critical(e.what());
-        return EXIT_FAILURE;
+        std::cout << "Option requires an argument" << '\n' << e.what() << std::endl;
+        exit(EXIT_FAILURE);
     } catch (cxxopts::argument_incorrect_type e) {
-        spdlog::get("logger")->critical("The argument provided for the option is invalid");
-        spdlog::get("logger")->critical(e.what());
-        return EXIT_FAILURE;
+        std::cout << "The argument provided for the option is of wrong type" << '\n' << e.what() << std::endl;
+        exit(EXIT_FAILURE);
     }
 
     Config config;
+
+    PipeHandler pipe;
+
+    pipe.start();
+
+    std::this_thread::sleep_for(std::chrono::seconds(20));
+
+    pipe.stop();
+
     // SaneHandler sane;
     // UDevHandler udev;
-
-    // queue.start();
-
-    // queue.stop();
 
     // if (auto value = config.get<Option<int>>("/global/debug"); value) {
     //     run_config.debug(run_config.debug() | value->value());

@@ -3,6 +3,8 @@
 #include <experimental/filesystem>
 #include <mutex>
 
+#include "defines.h"
+
 namespace scanbdpp {
     class RunConfiguration {
        public:
@@ -21,16 +23,13 @@ namespace scanbdpp {
         RunConfiguration &config_path(const std::experimental::filesystem::path &config_path);
 
        private:
-        int m_debug_level;
-        bool m_debug;
-        bool m_manager_mode;
-        bool m_foreground;
-        bool m_signal;
-        // TODO change later for release
-        std::experimental::filesystem::path m_config_path = "../config/scanbd.conf";
-        std::mutex instance_mutex;
+        static inline int _debug_level;
+        static inline bool _debug;
+        static inline bool _manager_mode;
+        static inline bool _foreground;
+        static inline bool _signal;
+        static inline std::experimental::filesystem::path _config_path = SCANBD_CONF;
+        static inline std::mutex _instance_mutex;
     };
-
-    inline RunConfiguration run_config;
 
 }  // namespace scanbdpp

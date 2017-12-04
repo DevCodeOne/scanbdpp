@@ -1,6 +1,6 @@
 #pragma once
 
-#define QUEUE_NAME "/scanbd_msg"
+#define PIPE_PATH "scanbd.pipe"
 
 #define SANE_REINIT_TIMEOUT 3
 
