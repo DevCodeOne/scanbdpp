@@ -65,4 +65,10 @@ namespace scanbdpp {
 
         _installed_signal_handlers = true;
     }
+
+    void SignalHandler::disable_signals_for_thread() {
+        sigset_t mask;
+        sigfillset(&mask);
+        pthread_sigmask(SIG_BLOCK, &mask, nullptr);
+    }
 }  // namespace scanbdpp

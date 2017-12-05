@@ -12,6 +12,7 @@ namespace scanbdpp {
     class SignalHandler {
        public:
         void install();
+        void disable_signals_for_thread();
         const std::atomic_bool &should_exit() const;
 
        private:

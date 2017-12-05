@@ -7,9 +7,14 @@
 #include "udevpp.h"
 
 #include "device_events.h"
+#include "signal_handler.h"
 
 namespace scanbdpp {
     void UDevHandler::udev_thread() {
+        SignalHandler signal_handler;
+
+        signal_handler.disable_signals_for_thread();
+
         udevpp::UDev udev;
         DeviceEvents device_events;
 

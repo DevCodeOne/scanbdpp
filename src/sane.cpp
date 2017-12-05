@@ -12,6 +12,7 @@
 
 #include "sane.h"
 #include "sanepp.h"
+#include "signal_handler.h"
 
 #include "config.h"
 
@@ -292,10 +293,9 @@ namespace scanbdpp {
     }
 
     void SaneHandler::PollHandler::poll_device() {
-        // Disable all signal handling in this thread
-        sigset_t mask;
-        sigfillset(&mask);
-        pthread_sigmask(SIG_BLOCK, &mask, nullptr);
+        SignalHandler signal_handler;
+
+        signal_handler.disable_signals_for_thread();
 
         auto device = device_info().open();
 
@@ -411,7 +411,6 @@ namespace scanbdpp {
 
                     current_action.m_last_value.reset();
                 }
-
             }
 
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
