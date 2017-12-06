@@ -9,6 +9,8 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+#include "spdlog/spdlog.h"
+
 #include "config.h"
 #include "device_events.h"
 #include "sane.h"

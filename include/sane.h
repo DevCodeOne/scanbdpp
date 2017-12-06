@@ -33,7 +33,9 @@ namespace scanbdpp {
         }
 
         template<typename T2>
-        bool match(const T2 &other) const { return m_value == other; }
+        bool match(const T2 &other) const {
+            return m_value == other;
+        }
 
        private:
         T m_value;
@@ -93,7 +95,7 @@ namespace scanbdpp {
            public:
             PollHandler(sanepp::Sane instance, sanepp::DeviceInfo device_info);
             PollHandler(const PollHandler &handler) = delete;
-            PollHandler(PollHandler &&handler);
+            PollHandler(PollHandler &&handler) = delete;
             ~PollHandler() = default;
 
             PollHandler &operator=(const PollHandler &) = delete;
@@ -105,6 +107,7 @@ namespace scanbdpp {
             const sanepp::DeviceInfo &device_info() const;
             const std::atomic_bool &should_stop() const;
             const std::thread &poll_thread() const;
+            void trigger_action(const std::string &name);
             std::thread &poll_thread();
 
            private:

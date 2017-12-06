@@ -4,15 +4,16 @@
 #include <chrono>
 #include <thread>
 
+#include "spdlog/spdlog.h"
 #include "udevpp.h"
 
 #include "device_events.h"
+#include "sane.h"
 #include "signal_handler.h"
 
 namespace scanbdpp {
     void UDevHandler::udev_thread() {
         SignalHandler signal_handler;
-
         signal_handler.disable_signals_for_thread();
 
         udevpp::UDev udev;
@@ -28,9 +29,11 @@ namespace scanbdpp {
                     if (device) {
                         if (device->get_device_type() == Constants::device_type) {
                             if (device->get_action() == Constants::add_action) {
+                                spdlog::get("logger")->info("Device added");
                                 device_events.device_added();
                             } else if (device->get_action() == Constants::remove_action) {
                                 device_events.device_removed();
+                                spdlog::get("logger")->info("Device removed");
                             }
                         }
                     } else {
@@ -45,16 +48,17 @@ namespace scanbdpp {
         if (!_thread_started) {
             _thread_started = true;
             _thread_inst = std::thread(udev_thread);
+            spdlog::get("logger")->info("Started udev thread");
         }
     }
 
     void UDevHandler::stop() const {
         if (_thread_started) {
             _thread_stop = true;
-        }
-
-        if (_thread_inst.joinable()) {
-            _thread_inst.join();
+            if (_thread_inst.joinable()) {
+                _thread_inst.join();
+            }
+            spdlog::get("logger")->info("Stopped udev thread");
         }
     }
 }  // namespace scanbdpp

@@ -19,39 +19,37 @@
 namespace scanbdpp {
 
     void SaneHandler::start() {
+        std::lock_guard<std::mutex> device_guard(_device_mutex);
         if (_device_threads.size() != 0) {
-            stop();
+            return;
         }
 
-        // critical section
-        {
-            sanepp::Sane sane_instance;
-            std::lock_guard<std::mutex> device_guard(_device_mutex);
-            for (auto device_info : sane_instance.devices(false)) {
-                _device_threads.emplace_back(std::make_unique<PollHandler>(sane_instance, device_info));
-            }
+        sanepp::Sane sane_instance;
+        auto devices = sane_instance.devices(true);
+        for (auto device_info : devices) {
+            spdlog::get("logger")->info("Starting polling thread for device {0}", device_info.name());
+            _device_threads.emplace_back(std::make_unique<PollHandler>(sane_instance, device_info));
         }
     }
 
     void SaneHandler::stop() {
+        std::lock_guard<std::mutex> device_guard(_device_mutex);
+
         if (_device_threads.size() == 0) {
             return;
         }
 
-        // critical section
-        {
-            std::lock_guard<std::mutex> device_guard(_device_mutex);
-            for (auto &current_handler : _device_threads) {
-                // stopping poll thread for device
-                current_handler->stop();
+        spdlog::get("logger")->info("Stopping {0} polling threads", _device_threads.size());
+        for (auto &current_handler : _device_threads) {
+            // stopping poll thread for device
+            current_handler->stop();
 
-                if (current_handler->poll_thread().joinable()) {
-                    current_handler->poll_thread().join();
-                }
+            if (current_handler->poll_thread().joinable()) {
+                current_handler->poll_thread().join();
             }
-
-            _device_threads.clear();
         }
+
+        _device_threads.clear();
     }
 
     void SaneHandler::start_device_polling(const std::string &device_name) {
@@ -110,12 +108,6 @@ namespace scanbdpp {
           m_device_info(device_info),
           m_terminate(false),
           m_poll_thread(std::bind(&SaneHandler::PollHandler::poll_device, this)) {}
-
-    SaneHandler::PollHandler::PollHandler(PollHandler &&handler)
-        : m_instance(handler.m_instance),
-          m_device_info(std::move(handler.m_device_info)),
-          m_terminate((bool)handler.m_terminate),
-          m_poll_thread(std::move(handler.m_poll_thread)) {}
 
     void SaneHandler::PollHandler::stop() { m_terminate = true; }
 
@@ -206,7 +198,13 @@ namespace scanbdpp {
                     }
 
                     for (auto current_option : device.options()) {
+                        auto value = current_option.value_as_variant();
                         if (!std::regex_match(current_option.info().name(), action_regex)) {
+                            continue;
+                        }
+
+                        if (!value || std::holds_alternative<sanepp::Group>(*value) ||
+                            std::holds_alternative<sanepp::Button>(*value)) {
                             continue;
                         }
 
@@ -220,12 +218,15 @@ namespace scanbdpp {
 
                         // TODO check if this correct
                         if (option_with_script != m_actions.cend() && !multiple_actions_allowed) {
-                            // overwriting existing action
-                            spdlog::get("logger")->info("Overwriting existing action");
+                            spdlog::get("logger")->info(
+                                "Overwriting existing action {0} with {1} for option {2} of device {3}",
+                                option_with_script->m_action_name, current_action.title(),
+                                option_with_script->m_option_info.name(), device.info().name());
                             option_with_script->m_option_info = current_option.info();
                         } else {
-                            // adding additional action
-                            spdlog::get("logger")->info("Adding existing action");
+                            spdlog::get("logger")->info("Adding new action {0} for option {1} of device {2}",
+                                                        current_action.title(), current_option.info().name(),
+                                                        device.info().name());
                             m_actions.emplace_back(current_option.info());
                             option_with_script = m_actions.end() - 1;
                         }
@@ -240,51 +241,64 @@ namespace scanbdpp {
                             if constexpr (std::is_same_v<current_type, int> ||
                                           std::is_same_v<current_type, sanepp::Fixed> ||
                                           std::is_same_v<current_type, bool>) {
-                                auto ret = current_action.get<confusepp::Section>(Config::Constants::numerical_trigger);
+                                auto trigger_section =
+                                    current_action.get<confusepp::Section>(Config::Constants::numerical_trigger);
 
-                                if (!ret) {
+                                if (trigger_section) {
+                                    if (auto int_value =
+                                            trigger_section->get<confusepp::Option<int>>(Config::Constants::from_value);
+                                        int_value) {
+                                        option_with_script->m_from_value = ActionValue<int>(int_value->value());
+                                    } else {
+                                        spdlog::get("logger")->warn("No from value was set");
+                                    }
+
+                                    if (auto int_value =
+                                            trigger_section->get<confusepp::Option<int>>(Config::Constants::to_value);
+                                        int_value) {
+                                        option_with_script->m_to_value = ActionValue<int>(int_value->value());
+                                    } else {
+                                        spdlog::get("logger")->warn("No to value was set");
+                                    }
+                                } else {
                                     spdlog::get("logger")->warn("No trigger values were set");
-                                    return;
+                                    option_with_script->m_from_value =
+                                        ActionValue<int>(Config::Constants::from_value_def_int);
+                                    option_with_script->m_to_value =
+                                        ActionValue<int>(Config::Constants::to_value_def_int);
                                 }
-
-                                if (auto int_value = ret->get<confusepp::Option<int>>(Config::Constants::from_value);
-                                    int_value) {
-                                    option_with_script->m_from_value = ActionValue<int>(int_value->value());
-                                } else {
-                                    spdlog::get("logger")->warn("No from value was set");
-                                }
-
-                                if (auto int_value = ret->get<confusepp::Option<int>>(Config::Constants::to_value);
-                                    int_value) {
-                                    option_with_script->m_to_value = ActionValue<int>(int_value->value());
-                                } else {
-                                    spdlog::get("logger")->warn("No from value was set");
-                                }
-
                             } else if constexpr (std::is_same_v<current_type, std::string>) {
-                                auto ret = current_action.get<confusepp::Section>(Config::Constants::string_trigger);
+                                auto trigger_section =
+                                    current_action.get<confusepp::Section>(Config::Constants::string_trigger);
 
-                                if (!ret) {
-                                    spdlog::get("logger")->warn("No trigger values were set");
-                                    return;
-                                }
+                                if (trigger_section) {
+                                    try {
+                                        if (auto string_value = trigger_section->get<confusepp::Option<std::string>>(
+                                                Config::Constants::from_value);
+                                            string_value) {
+                                            option_with_script->m_from_value =
+                                                ActionValue<std::string>(string_value->value());
+                                        }
 
-                                try {
-                                    if (auto string_value =
-                                            ret->get<confusepp::Option<std::string>>(Config::Constants::from_value);
-                                        string_value) {
+                                        if (auto string_value = trigger_section->get<confusepp::Option<std::string>>(
+                                                Config::Constants::to_value);
+                                            string_value) {
+                                            option_with_script->m_to_value =
+                                                ActionValue<std::string>(string_value->value());
+                                        }
+                                    } catch (std::regex_error) {
+                                        // Error compiling regular expressions
                                         option_with_script->m_from_value =
-                                            ActionValue<std::string>(string_value->value());
-                                    }
-
-                                    if (auto string_value =
-                                            ret->get<confusepp::Option<std::string>>(Config::Constants::to_value);
-                                        string_value) {
+                                            ActionValue<std::string>(Config::Constants::from_value_def_str);
                                         option_with_script->m_to_value =
-                                            ActionValue<std::string>(string_value->value());
+                                            ActionValue<std::string>(Config::Constants::to_value_def_str);
                                     }
-                                } catch (std::regex_error) {
-                                    // Error compiling regular expressions
+                                } else {
+                                    spdlog::get("logger")->warn("No trigger values were set");
+                                    option_with_script->m_from_value =
+                                        ActionValue<std::string>(Config::Constants::from_value_def_str);
+                                    option_with_script->m_to_value =
+                                        ActionValue<std::string>(Config::Constants::to_value_def_str);
                                 }
                             }
                         };
@@ -302,7 +316,6 @@ namespace scanbdpp {
 
     void SaneHandler::PollHandler::poll_device() {
         SignalHandler signal_handler;
-
         signal_handler.disable_signals_for_thread();
 
         auto device = device_info().open();
@@ -353,7 +366,7 @@ namespace scanbdpp {
                 spdlog::get("logger")->info("Found local actions for device {0}", device_info().name());
 
                 find_matching_options(*device, device_section);
-                find_matching_options(*device, device_section);
+                find_matching_functions(*device, device_section);
             }
         }
 
@@ -362,8 +375,8 @@ namespace scanbdpp {
 
         spdlog::get("logger")->info("Start polling for device {0}", device_info().name());
         while (!m_terminate) {
-            // spdlog::get("logger")->info("Polling device {0}", device_info().name());
-            for (auto current_action : m_actions) {
+            // Reference to current action so the values that get updated are actually written to it
+            for (auto &current_action : m_actions) {
                 auto current_value = device->find_option(current_action.m_option_info)->value_as_variant();
 
                 if (!current_value) {
@@ -399,18 +412,6 @@ namespace scanbdpp {
                     return false;
                 };
 
-                std::visit(
-                    [&current_action](const auto &current_value) {
-                        using type = std::decay_t<decltype(current_value)>;
-
-                        if constexpr (std::is_same_v<type, int> || std::is_same_v<type, std::string> ||
-                                      std::is_same_v<type, bool>) {
-                            spdlog::get("logger")->info("{0} has value {1}", current_action.m_option_info.name(),
-                                                        current_value);
-                        }
-                    },
-                    *current_value);
-
                 bool value_changed = std::visit(has_value_changed, *current_value);
                 current_action.m_last_value = current_value;
 
@@ -439,5 +440,6 @@ namespace scanbdpp {
 
             std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
         }
+        spdlog::get("logger")->info("Stopped polling device {0}", device->info().name());
     }
 }  // namespace scanbdpp

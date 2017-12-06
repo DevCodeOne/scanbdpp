@@ -16,11 +16,11 @@ namespace scanbdpp {
     void SignalHandler::sig_hup_handler(int) {
         SaneHandler sane;
 
-        sane.stop();
-        sane.start();
-
         Config conf;
         conf.reload_config();
+
+        sane.stop();
+        sane.start();
     }
 
     void SignalHandler::sig_usr1_handler(int) {
@@ -33,7 +33,6 @@ namespace scanbdpp {
         sane.start();
     }
 
-    // TODO implement
     void SignalHandler::sig_term_handler(int) { _should_exit = true; }
 
     const std::atomic_bool &SignalHandler::should_exit() const { return _should_exit; }

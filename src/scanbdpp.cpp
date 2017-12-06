@@ -22,14 +22,16 @@
 #include "signal_handler.h"
 #include "udev.h"
 
+using confusepp::List;
+using confusepp::Option;
+
 void die(int exit_code) { exit(exit_code); }
 
 int main(int argc, char *argv[]) {
-    // TODO remove these later
     using namespace scanbdpp;
-    using namespace cxxopts;
-    using confusepp::List;
-    using confusepp::Option;
+
+    SignalHandler signals;
+    signals.install();
 
     auto logger = spdlog::stdout_color_mt("logger");
     RunConfiguration run_config;
@@ -106,8 +108,6 @@ int main(int argc, char *argv[]) {
     PipeHandler pipe;
     SaneHandler sane;
     UDevHandler udev;
-    SignalHandler signals;
-    signals.install();
 
     if (auto value = config.get<Option<int>>(Config::Constants::global / Config::Constants::debug); value) {
         run_config.debug(run_config.debug() | value->value());
@@ -349,15 +349,18 @@ int main(int argc, char *argv[]) {
 
         while (true) {
             if (signals.should_exit()) {
-                spdlog::get("logger")->info("Exiting scanbd");
                 sane.stop();
                 udev.stop();
                 pipe.stop();
-                die(EXIT_SUCCESS);
+                spdlog::get("logger")->info("Exiting scanbd");
+                spdlog::drop_all();
+                return EXIT_SUCCESS;
             }
 
             if (pause() < 0) {
-                spdlog::get("logger")->warn("pause() error {0}", strerror(errno));
+                if (errno != EINTR) {
+                    spdlog::get("logger")->warn("pause() error {0}", strerror(errno));
+                }
             }
         }
     }

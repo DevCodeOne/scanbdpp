@@ -65,8 +65,6 @@ namespace scanbdpp {
 
         auto conf = confusepp::Config::parse(run_config.config_path(), std::move(config_structure));
 
-        // if no trigger is selected default to string-trigger
-
         if (conf) {
             _config = std::make_unique<confusepp::Config>(std::move(*conf));
         } else {

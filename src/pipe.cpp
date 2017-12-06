@@ -36,7 +36,6 @@ namespace scanbdpp {
 
     void PipeHandler::pipe_thread() {
         SignalHandler signal_handler;
-
         signal_handler.disable_signals_for_thread();
 
         if (mkfifo(PipeHandler::pipe_path.c_str(), S_IRUSR | S_IWUSR) != 0) {
