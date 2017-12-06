@@ -52,55 +52,15 @@ namespace scanbdpp {
         _device_threads.clear();
     }
 
-    void SaneHandler::start_device_polling(const std::string &device_name) {
+    void SaneHandler::trigger_action(const std::string &device_name, const std::string &action_name) {
         std::lock_guard<std::mutex> device_guard(_device_mutex);
 
-        auto thread_with_device = [&device_name](const auto &current_handler) {
-            return current_handler->device_info().name() == device_name;
-        };
-
-        if (std::any_of(_device_threads.cbegin(), _device_threads.cend(), thread_with_device)) {
-            return;
+        for (auto &current_handler : _device_threads) {
+            if (current_handler->device_info().name() == device_name) {
+                current_handler->trigger_action(action_name);
+                break;
+            }
         }
-
-        sanepp::Sane sane_instance;
-        auto devices = sane_instance.devices(false);
-
-        auto device_info = std::find_if(devices.cbegin(), devices.cend(), [&device_name](const auto &current_info) {
-            return current_info.name() == device_name;
-        });
-
-        if (device_info != devices.cend()) {
-            _device_threads.emplace_back(std::make_unique<PollHandler>(sane_instance, *device_info));
-        }
-    }
-
-    void SaneHandler::stop_device_polling(const std::string &device_name) {
-        std::lock_guard<std::mutex> device_guard(_device_mutex);
-
-        auto thread_with_device = [&device_name](const auto &current_handler) {
-            return current_handler->device_info().name() == device_name;
-        };
-
-        auto device = std::find_if(_device_threads.cbegin(), _device_threads.cend(), thread_with_device);
-
-        if (device == _device_threads.cend()) {
-            return;
-        }
-
-        auto &poll_handler = *(device->get());
-
-        poll_handler.stop();
-
-        if (poll_handler.poll_thread().joinable()) {
-            poll_handler.poll_thread().join();
-        }
-
-        _device_threads.erase(std::remove_if(_device_threads.begin(), _device_threads.end(),
-                                             [&device_name](const auto &current_handler) {
-                                                 return current_handler->device_info().name() == device_name;
-                                             }),
-                              _device_threads.end());
     }
 
     SaneHandler::PollHandler::PollHandler(sanepp::Sane instance, sanepp::DeviceInfo device_info)
@@ -118,6 +78,14 @@ namespace scanbdpp {
     const std::thread &SaneHandler::PollHandler::poll_thread() const { return m_poll_thread; }
 
     std::thread &SaneHandler::PollHandler::poll_thread() { return m_poll_thread; }
+
+    void SaneHandler::PollHandler::trigger_action(const std::string &action) {
+        for (auto &current_action : m_actions) {
+            if (current_action.m_action_name == action) {
+                current_action.m_trigger = true;
+            }
+        }
+    }
 
     void SaneHandler::PollHandler::find_matching_functions(const sanepp::Device &device,
                                                            const confusepp::Section &root) {
@@ -416,7 +384,8 @@ namespace scanbdpp {
                 current_action.m_last_value = current_value;
 
                 // TODO Handle script, also add event triggers that can be triggered from outside the thread
-                if (value_changed) {
+                if (value_changed || current_action.m_trigger) {
+                    current_action.m_trigger = false;
                     // Destroys current value of the optional thus freeing the resource (the device that the
                     // optional holds)
                     spdlog::get("logger")->info("Closing device {0}", device_info().name());

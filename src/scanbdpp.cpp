@@ -55,6 +55,7 @@ int main(int argc, char *argv[]) {
 
         if (options.count("help")) {
             std::cout << options.help() << std::endl;
+            die(EXIT_SUCCESS);
         }
 
         run_config.manager_mode(options.count("manager"));
@@ -76,7 +77,7 @@ int main(int argc, char *argv[]) {
 
             std::string device = options["trigger"].as<std::string>();
             std::string action = options["action"].as<std::string>();
-            std::string message = device + ", " + action;
+            std::string message = device + "," + action;
 
             handler.write_message(message);
 

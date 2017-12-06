@@ -86,9 +86,7 @@ namespace scanbdpp {
        public:
         void start();
         void stop();
-        void start_device_polling(const std::string &device_name);
-        void stop_device_polling(const std::string &device_name);
-        void trigger_action(const std::string &device_name, const std::string action_name);
+        void trigger_action(const std::string &device_name, const std::string &action_name);
 
        private:
         class PollHandler {
@@ -123,6 +121,8 @@ namespace scanbdpp {
                 value_type m_to_value;
                 std::experimental::filesystem::path m_script;
                 std::string m_action_name;
+                // TODO replace with atomic
+                volatile bool m_trigger = false;
             };
 
             void find_matching_functions(const sanepp::Device &device, const confusepp::Section &section);
