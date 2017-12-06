@@ -1,12 +1,12 @@
 #pragma once
 
 #include <atomic>
+#include <experimental/filesystem>
 #include <memory>
 #include <regex>
 #include <thread>
 #include <variant>
 #include <vector>
-#include <experimental/filesystem>
 
 #include "confusepp.h"
 
@@ -32,7 +32,8 @@ namespace scanbdpp {
             return *this;
         }
 
-        bool match(const T &other) const { return m_value == other; }
+        template<typename T2>
+        bool match(const T2 &other) const { return m_value == other; }
 
        private:
         T m_value;
@@ -59,23 +60,23 @@ namespace scanbdpp {
         std::regex m_regexp;
     };
 
-    template<typename T>
-    bool operator==(const ActionValue<T> &lhs, const T &rhs) {
+    template<typename T, typename T2>
+    bool operator==(const ActionValue<T> &lhs, const T2 &rhs) {
         return lhs.match(rhs);
     }
 
-    template<typename T>
-    bool operator==(const T &lhs, const ActionValue<T> &rhs) {
+    template<typename T, typename T2>
+    bool operator==(const T2 &lhs, const ActionValue<T> &rhs) {
         return rhs == lhs;
     }
 
-    template<typename T>
-    bool operator!=(const ActionValue<T> &lhs, const T &rhs) {
+    template<typename T, typename T2>
+    bool operator!=(const ActionValue<T> &lhs, const T2 &rhs) {
         return !(lhs.match(rhs));
     }
 
-    template<typename T>
-    bool operator!=(const T &lhs, const ActionValue<T> &rhs) {
+    template<typename T, typename T2>
+    bool operator!=(const T2 &lhs, const ActionValue<T> &rhs) {
         return rhs != lhs;
     }
 

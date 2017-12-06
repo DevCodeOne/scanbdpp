@@ -221,9 +221,11 @@ namespace scanbdpp {
                         // TODO check if this correct
                         if (option_with_script != m_actions.cend() && !multiple_actions_allowed) {
                             // overwriting existing action
+                            spdlog::get("logger")->info("Overwriting existing action");
                             option_with_script->m_option_info = current_option.info();
                         } else {
                             // adding additional action
+                            spdlog::get("logger")->info("Adding existing action");
                             m_actions.emplace_back(current_option.info());
                             option_with_script = m_actions.end() - 1;
                         }
@@ -241,23 +243,29 @@ namespace scanbdpp {
                                 auto ret = current_action.get<confusepp::Section>(Config::Constants::numerical_trigger);
 
                                 if (!ret) {
+                                    spdlog::get("logger")->warn("No trigger values were set");
                                     return;
                                 }
 
                                 if (auto int_value = ret->get<confusepp::Option<int>>(Config::Constants::from_value);
                                     int_value) {
                                     option_with_script->m_from_value = ActionValue<int>(int_value->value());
+                                } else {
+                                    spdlog::get("logger")->warn("No from value was set");
                                 }
 
                                 if (auto int_value = ret->get<confusepp::Option<int>>(Config::Constants::to_value);
                                     int_value) {
                                     option_with_script->m_to_value = ActionValue<int>(int_value->value());
+                                } else {
+                                    spdlog::get("logger")->warn("No from value was set");
                                 }
 
                             } else if constexpr (std::is_same_v<current_type, std::string>) {
                                 auto ret = current_action.get<confusepp::Section>(Config::Constants::string_trigger);
 
                                 if (!ret) {
+                                    spdlog::get("logger")->warn("No trigger values were set");
                                     return;
                                 }
 
@@ -376,10 +384,14 @@ namespace scanbdpp {
                         return false;
                     }
 
-                    if constexpr (std::is_same_v<type, int> || std::is_same_v<type, std::string> ||
-                                  std::is_same_v<type, sanepp::Fixed> || std::is_same_v<type, bool>) {
-                        return std::get<ActionValue<type>>(current_action.m_to_value) == current_value &&
-                               std::get<ActionValue<type>>(current_action.m_from_value) ==
+                    if constexpr (std::is_same_v<type, int> || std::is_same_v<type, sanepp::Fixed> ||
+                                  std::is_same_v<type, bool>) {
+                        return std::get<ActionValue<int>>(current_action.m_to_value) == current_value &&
+                               std::get<ActionValue<int>>(current_action.m_from_value) ==
+                                   std::get<type>(current_action.m_last_value.value());
+                    } else if constexpr (std::is_same_v<type, std::string>) {
+                        return std::get<ActionValue<std::string>>(current_action.m_to_value) == current_value &&
+                               std::get<ActionValue<std::string>>(current_action.m_from_value) ==
                                    std::get<type>(current_action.m_last_value.value());
                     } else {
                         spdlog::get("logger")->critical("Action has invalid type should never happen");
@@ -387,13 +399,25 @@ namespace scanbdpp {
                     return false;
                 };
 
+                std::visit(
+                    [&current_action](const auto &current_value) {
+                        using type = std::decay_t<decltype(current_value)>;
+
+                        if constexpr (std::is_same_v<type, int> || std::is_same_v<type, std::string> ||
+                                      std::is_same_v<type, bool>) {
+                            spdlog::get("logger")->info("{0} has value {1}", current_action.m_option_info.name(),
+                                                        current_value);
+                        }
+                    },
+                    *current_value);
+
                 bool value_changed = std::visit(has_value_changed, *current_value);
                 current_action.m_last_value = current_value;
 
                 // TODO Handle script, also add event triggers that can be triggered from outside the thread
                 if (value_changed) {
-                    // Destroys current value of the optional thus freeing the resource (the device that the optional
-                    // holds)
+                    // Destroys current value of the optional thus freeing the resource (the device that the
+                    // optional holds)
                     spdlog::get("logger")->info("Closing device {0}", device_info().name());
                     device.reset();
 
