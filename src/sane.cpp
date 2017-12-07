@@ -116,9 +116,11 @@ namespace scanbdpp {
 
                         if (auto env = current_function.get<confusepp::Option<std::string>>(Config::Constants::env);
                             env) {
-                            auto function_with_env =
-                                std::find_if(m_functions.begin(), m_functions.end(),
-                                             [&env](const Function &current) { return current.m_env == env->value(); });
+                            // TODO check if this is correct
+                            auto function_with_env = std::find_if(
+                                m_functions.begin(), m_functions.end(), [&current_option](const Function &current) {
+                                    return current.m_option_info == current_option.info();
+                                });
                             if (function_with_env != m_functions.cend()) {
                                 // Warning for overriding function
                                 function_with_env->m_option_info = current_option.info();
@@ -343,37 +345,54 @@ namespace scanbdpp {
 
         spdlog::get("logger")->info("Start polling for device {0}", device_info().name());
         while (!m_terminate) {
-            // Reference to current action so the values that get updated are actually written to it
-            for (auto &current_action : m_actions) {
-                auto current_value = device->find_option(current_action.m_option_info)->value_as_variant();
+            for (auto current_action = m_actions.begin(); current_action != m_actions.end(); ++current_action) {
+                // Only get a value once, because otherwise the backend might reset the value after
+                // the value has been checked (Check original scanbd for reference)
+                auto option_first_used =
+                    std::find_if(m_actions.begin(), current_action, [&current_action](const auto &action) {
+                        return current_action->m_option_info == action.m_option_info;
+                    });
+
+                if (option_first_used != current_action) {
+                    current_action->m_current_value = option_first_used->m_current_value;
+                } else {
+                    current_action->m_current_value =
+                        device->find_option(current_action->m_option_info)->value_as_variant();
+                }
+
+                std::optional<sanepp::Option::value_type> current_value = current_action->m_current_value;
 
                 if (!current_value) {
                     spdlog::get("logger")->warn("Couldn't get current value of option {0} of device {1}",
-                                                current_action.m_option_info.name(), device_info().name());
+                                                current_action->m_option_info.name(), device_info().name());
                     continue;
                 }
 
-                if (!current_action.m_last_value) {
-                    current_action.m_last_value = current_value;
+                if (!current_action->m_last_value) {
+                    current_action->m_last_value = current_value;
                 }
 
                 auto has_value_changed = [&current_action](const auto &current_value) -> bool {
                     using type = std::decay_t<decltype(current_value)>;
 
-                    if (!std::holds_alternative<type>(*current_action.m_last_value)) {
+                    if (!std::holds_alternative<type>(*current_action->m_last_value)) {
                         spdlog::get("logger")->critical("Type of action has changed should never happen");
                         return false;
                     }
 
                     if constexpr (std::is_same_v<type, int> || std::is_same_v<type, sanepp::Fixed> ||
                                   std::is_same_v<type, bool>) {
-                        return std::get<ActionValue<int>>(current_action.m_to_value) == current_value &&
-                               std::get<ActionValue<int>>(current_action.m_from_value) ==
-                                   std::get<type>(current_action.m_last_value.value());
+                        auto to_value = std::get<ActionValue<int>>(current_action->m_to_value);
+                        auto from_value = std::get<ActionValue<int>>(current_action->m_from_value);
+                        auto last_value = std::get<type>(current_action->m_last_value.value());
+
+                        return to_value == current_value && from_value == last_value;
                     } else if constexpr (std::is_same_v<type, std::string>) {
-                        return std::get<ActionValue<std::string>>(current_action.m_to_value) == current_value &&
-                               std::get<ActionValue<std::string>>(current_action.m_from_value) ==
-                                   std::get<type>(current_action.m_last_value.value());
+                        auto to_value = std::get<ActionValue<std::string>>(current_action->m_to_value);
+                        auto from_value = std::get<ActionValue<std::string>>(current_action->m_from_value);
+                        auto last_value = std::get<type>(current_action->m_last_value.value());
+
+                        return to_value == current_value && from_value == last_value;
                     } else {
                         spdlog::get("logger")->critical("Action has invalid type should never happen");
                     }
@@ -381,11 +400,11 @@ namespace scanbdpp {
                 };
 
                 bool value_changed = std::visit(has_value_changed, *current_value);
-                current_action.m_last_value = current_value;
+                current_action->m_last_value = current_value;
 
                 // TODO Handle script, also add event triggers that can be triggered from outside the thread
-                if (value_changed || current_action.m_trigger) {
-                    current_action.m_trigger = false;
+                if (value_changed || current_action->m_trigger) {
+                    current_action->m_trigger = false;
                     // Destroys current value of the optional thus freeing the resource (the device that the
                     // optional holds)
                     spdlog::get("logger")->info("Closing device {0}", device_info().name());
@@ -403,7 +422,7 @@ namespace scanbdpp {
                         return;
                     }
 
-                    current_action.m_last_value.reset();
+                    current_action->m_last_value.reset();
                 }
             }
 

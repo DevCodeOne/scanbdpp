@@ -13,11 +13,6 @@
 #include "sanepp.h"
 
 namespace scanbdpp {
-    struct Function {
-        sanepp::OptionInfo m_option_info;
-        std::string m_env;
-    };
-
     template<typename T>
     struct ActionValue {
        public:
@@ -109,6 +104,7 @@ namespace scanbdpp {
             std::thread &poll_thread();
 
            private:
+            // TODO proper class
             struct Action {
                 using value_type = std::variant<ActionValue<int>, ActionValue<sanepp::Fixed>, ActionValue<bool>,
                                                 ActionValue<std::string>>;
@@ -117,12 +113,17 @@ namespace scanbdpp {
 
                 sanepp::OptionInfo m_option_info;
                 std::optional<sanepp::Option::value_type> m_last_value;
+                std::optional<sanepp::Option::value_type> m_current_value;
                 value_type m_from_value;
                 value_type m_to_value;
                 std::experimental::filesystem::path m_script;
                 std::string m_action_name;
-                // TODO replace with atomic
                 volatile bool m_trigger = false;
+            };
+
+            struct Function {
+                sanepp::OptionInfo m_option_info;
+                std::string m_env;
             };
 
             void find_matching_functions(const sanepp::Device &device, const confusepp::Section &section);
