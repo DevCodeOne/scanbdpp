@@ -25,63 +25,23 @@ namespace scanbdpp {
             return;
         }
 
-        std::vector<char *> environment_variables;
+        std::vector<std::string> env_vars = environment();
 
-        std::string current_env = "PATH";
-        confusepp::path root = Config::Constants::global;
-
-        if (getenv(current_env.c_str())) {
-            environment_variables.emplace_back(strdup(getenv(current_env.c_str())));
-        } else {
-            environment_variables.emplace_back(strdup("/usr/sbin:/usr/bin:/sbin:/bin"));
+        if (auto device = config.get<confusepp::Option<std::string>>(Config::Constants::global / Config::Constants::device); device) {
+            env_vars.emplace_back(device->value() + "=" + device_name);
         }
 
-        current_env = "PWD";
-
-        if (getenv(current_env.c_str())) {
-            environment_variables.emplace_back(strdup(getenv(current_env.c_str())));
-        } else {
-            char buffer[path_max];
-            char *working_directory = getcwd(buffer, path_max - 1);
-
-            if (working_directory) {
-                environment_variables.emplace_back(strdup(working_directory));
-            } else {
-                // TODO log couldn't get working directory
-            }
+        if (auto action = config.get<confusepp::Option<std::string>>(Config::Constants::global / Config::Constants::action); action) {
+            env_vars.emplace_back(action->value() + "=" + action_name);
         }
 
-        current_env = "USER";
+        std::unique_ptr<const char *[]> environment_variables = std::make_unique<const char *[]>(env_vars.size() + 1);
 
-        if (getenv(current_env.c_str())) {
-            environment_variables.emplace_back(strdup(getenv(current_env.c_str())));
-        } else {
-            passwd *pwd = getpwuid(geteuid());
-            environment_variables.emplace_back(strdup(pwd->pw_name));
+        size_t index = 0;
+        for (auto &current_env : env_vars) {
+            environment_variables[index++] = current_env.c_str();
         }
-
-        current_env = "HOME";
-
-        if (getenv(current_env.c_str())) {
-            environment_variables.emplace_back(strdup(getenv(current_env.c_str())));
-        } else {
-            passwd *pwd = getpwuid(geteuid());
-            environment_variables.emplace_back(strdup(pwd->pw_dir));
-        }
-
-        if (auto device = config.get<confusepp::Option<std::string>>(root / "device"); device) {
-            std::ostringstream device_environment;
-            device_environment << device->value() << "=" << device_name;
-            environment_variables.emplace_back(strdup(device_environment.str().c_str()));
-        }
-
-        if (auto action = config.get<confusepp::Option<std::string>>(root / "action"); action) {
-            std::ostringstream action_environment;
-            action_environment << action->value() << "=" << action_name;
-            environment_variables.emplace_back(strdup(action_environment.str().c_str()));
-        }
-
-        environment_variables.emplace_back(nullptr);
+        environment_variables[env_vars.size()] = nullptr;
 
         std::string script = config.get<confusepp::Option<std::string>>(parameter)->value();
         if (auto script_path = make_script_path_absolute(script); !script_path.empty()) {
@@ -98,7 +58,7 @@ namespace scanbdpp {
                 }
             } else if (cpid == 0) {
                 if (execle(script_path.native().c_str(), script_path.native().c_str(), nullptr,
-                           environment_variables.data()) < 0) {
+                           environment_variables.get()) < 0) {
                     // TODO log error
                 }
 
@@ -106,11 +66,6 @@ namespace scanbdpp {
             } else {
                 // TODO log error couldn't fork
             }
-        }
-
-        // free environment_variables ? in original program script_path gets freed
-        for (auto environment_variable : environment_variables) {
-            std::free(environment_variable);
         }
     }
 

@@ -104,24 +104,77 @@ namespace scanbdpp {
             std::thread &poll_thread();
 
            private:
-            // TODO proper class
-            struct Action {
+            class Action {
+               public:
                 using value_type = std::variant<ActionValue<int>, ActionValue<sanepp::Fixed>, ActionValue<bool>,
                                                 ActionValue<std::string>>;
 
                 inline Action(const sanepp::OptionInfo &option_info) : m_option_info(option_info) {}
+                inline Action(const Action &action) = delete;
+                inline Action(Action &&other)
+                    : m_from_value(std::move(other.m_from_value)),
+                      m_to_value(std::move(other.m_to_value)),
+                      m_option_info(std::move(other.m_option_info)),
+                      m_last_value(std::move(other.m_last_value)),
+                      m_current_value(std::move(other.m_current_value)),
+                      m_script(std::move(other.m_script)),
+                      m_action_name(std::move(other.m_action_name)),
+                      m_trigger((bool)other.m_trigger) {}
 
+                inline void set_trigger() { m_trigger = true; }
+                inline void unset_trigger() { m_trigger = false; }
+                inline void script(const std::experimental::filesystem::path &new_script) { m_script = new_script; }
+                inline void action_name(const std::string &new_action_name) { m_action_name = new_action_name; }
+                inline void option_info(const sanepp::OptionInfo &new_option_info) { m_option_info = new_option_info; }
+                inline void current_value(const std::optional<sanepp::Option::value_type> new_current_value) {
+                    m_current_value = new_current_value;
+                }
+                inline void last_value(const std::optional<sanepp::Option::value_type> new_last_value) {
+                    m_last_value = new_last_value;
+                }
+                inline void from_value(const value_type &new_from_value) { m_from_value = new_from_value; }
+                inline void to_value(const value_type &new_to_value) { m_to_value = new_to_value; }
+
+                inline bool is_triggered() const { return m_trigger; }
+                inline const std::string &action_name() const { return m_action_name; }
+                inline const std::experimental::filesystem::path &script() const { return m_script; }
+                inline const std::optional<sanepp::Option::value_type> &current_value() const {
+                    return m_current_value;
+                }
+                inline const std::optional<sanepp::Option::value_type> &last_value() const { return m_last_value; }
+                inline const sanepp::OptionInfo &option_info() const { return m_option_info; }
+                inline const value_type &from_value() { return m_from_value; }
+                inline const value_type &to_value() { return m_to_value; }
+
+               private:
+                value_type m_from_value;
+                value_type m_to_value;
                 sanepp::OptionInfo m_option_info;
                 std::optional<sanepp::Option::value_type> m_last_value;
                 std::optional<sanepp::Option::value_type> m_current_value;
-                value_type m_from_value;
-                value_type m_to_value;
                 std::experimental::filesystem::path m_script;
                 std::string m_action_name;
-                volatile bool m_trigger = false;
+                std::atomic_bool m_trigger = false;
             };
 
-            struct Function {
+            class Function {
+               public:
+                inline Function(const sanepp::OptionInfo &option_info) : m_option_info(option_info) {}
+
+                inline Function &option_info(const sanepp::OptionInfo &new_option_info) {
+                    m_option_info = new_option_info;
+                    return *this;
+                }
+
+                inline Function &env(const std::string &new_env) {
+                    m_env = new_env;
+                    return *this;
+                }
+
+                inline const sanepp::OptionInfo &option_info() const { return m_option_info; }
+                inline const std::string &env() const { return m_env; }
+
+               private:
                 sanepp::OptionInfo m_option_info;
                 std::string m_env;
             };

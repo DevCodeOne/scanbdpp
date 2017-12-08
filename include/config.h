@@ -2,6 +2,8 @@
 
 #include <memory>
 #include <mutex>
+#include <string>
+#include <vector>
 
 #include "confusepp.h"
 
@@ -124,4 +126,6 @@ namespace scanbdpp {
 
     std::experimental::filesystem::path make_script_path_absolute(
         const std::experimental::filesystem::path& script_path);
+
+    std::vector<std::string> environment();
 }  // namespace scanbdpp

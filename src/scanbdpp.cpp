@@ -1,9 +1,10 @@
+// clang-format off
 #include "common.h"
-
 #include <grp.h>
 #include <pwd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+// clang-format on
 
 #include <chrono>
 #include <cstdlib>

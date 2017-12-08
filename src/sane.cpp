@@ -1,4 +1,7 @@
+// clang-format off
 #include "common.h"
+#include <sys/wait.h>
+// clang-format on
 
 #include <algorithm>
 #include <atomic>
@@ -81,8 +84,8 @@ namespace scanbdpp {
 
     void SaneHandler::PollHandler::trigger_action(const std::string &action) {
         for (auto &current_action : m_actions) {
-            if (current_action.m_action_name == action) {
-                current_action.m_trigger = true;
+            if (current_action.action_name() == action) {
+                current_action.set_trigger();
             }
         }
     }
@@ -117,15 +120,15 @@ namespace scanbdpp {
                         if (auto env = current_function.get<confusepp::Option<std::string>>(Config::Constants::env);
                             env) {
                             // TODO check if this is correct
-                            auto function_with_env = std::find_if(
+                            auto function_with_option = std::find_if(
                                 m_functions.begin(), m_functions.end(), [&current_option](const Function &current) {
-                                    return current.m_option_info == current_option.info();
+                                    return current.option_info() == current_option.info();
                                 });
-                            if (function_with_env != m_functions.cend()) {
+                            if (function_with_option != m_functions.end()) {
                                 // Warning for overriding function
-                                function_with_env->m_option_info = current_option.info();
+                                function_with_option->env(env->value());
                             } else {
-                                m_functions.emplace_back(Function{current_option.info(), env->value()});
+                                m_functions.emplace_back(Function(current_option.info()).env(env->value()));
                             }
                         } else {
                             // Error no env is set
@@ -183,16 +186,16 @@ namespace scanbdpp {
 
                         auto option_with_script =
                             std::find_if(m_actions.begin(), m_actions.end(), [&current_option](const auto &action) {
-                                return action.m_option_info == current_option.info();
+                                return action.option_info() == current_option.info();
                             });
 
                         // TODO check if this correct
                         if (option_with_script != m_actions.cend() && !multiple_actions_allowed) {
                             spdlog::get("logger")->info(
                                 "Overwriting existing action {0} with {1} for option {2} of device {3}",
-                                option_with_script->m_action_name, current_action.title(),
-                                option_with_script->m_option_info.name(), device.info().name());
-                            option_with_script->m_option_info = current_option.info();
+                                option_with_script->action_name(), current_action.title(),
+                                option_with_script->option_info().name(), device.info().name());
+                            option_with_script->option_info(current_option.info());
                         } else {
                             spdlog::get("logger")->info("Adding new action {0} for option {1} of device {2}",
                                                         current_action.title(), current_option.info().name(),
@@ -201,10 +204,10 @@ namespace scanbdpp {
                             option_with_script = m_actions.end() - 1;
                         }
 
-                        option_with_script->m_action_name = current_action.title();
-                        option_with_script->m_script = script->value();
-                        option_with_script->m_option_info = current_option.info();
-                        option_with_script->m_last_value = current_option.value_as_variant();
+                        option_with_script->action_name(current_action.title());
+                        option_with_script->script(script->value());
+                        option_with_script->option_info(current_option.info());
+                        option_with_script->last_value(current_option.value_as_variant());
 
                         auto init_range_values = [&current_action, &option_with_script](const auto &sane_value) {
                             using current_type = std::decay_t<decltype(sane_value)>;
@@ -218,7 +221,7 @@ namespace scanbdpp {
                                     if (auto int_value =
                                             trigger_section->get<confusepp::Option<int>>(Config::Constants::from_value);
                                         int_value) {
-                                        option_with_script->m_from_value = ActionValue<int>(int_value->value());
+                                        option_with_script->from_value(ActionValue<int>(int_value->value()));
                                     } else {
                                         spdlog::get("logger")->warn("No from value was set");
                                     }
@@ -226,16 +229,15 @@ namespace scanbdpp {
                                     if (auto int_value =
                                             trigger_section->get<confusepp::Option<int>>(Config::Constants::to_value);
                                         int_value) {
-                                        option_with_script->m_to_value = ActionValue<int>(int_value->value());
+                                        option_with_script->to_value(ActionValue<int>(int_value->value()));
                                     } else {
                                         spdlog::get("logger")->warn("No to value was set");
                                     }
                                 } else {
                                     spdlog::get("logger")->warn("No trigger values were set");
-                                    option_with_script->m_from_value =
-                                        ActionValue<int>(Config::Constants::from_value_def_int);
-                                    option_with_script->m_to_value =
-                                        ActionValue<int>(Config::Constants::to_value_def_int);
+                                    option_with_script->from_value(
+                                        ActionValue<int>(Config::Constants::from_value_def_int));
+                                    option_with_script->to_value(ActionValue<int>(Config::Constants::to_value_def_int));
                                 }
                             } else if constexpr (std::is_same_v<current_type, std::string>) {
                                 auto trigger_section =
@@ -246,29 +248,29 @@ namespace scanbdpp {
                                         if (auto string_value = trigger_section->get<confusepp::Option<std::string>>(
                                                 Config::Constants::from_value);
                                             string_value) {
-                                            option_with_script->m_from_value =
-                                                ActionValue<std::string>(string_value->value());
+                                            option_with_script->from_value(
+                                                ActionValue<std::string>(string_value->value()));
                                         }
 
                                         if (auto string_value = trigger_section->get<confusepp::Option<std::string>>(
                                                 Config::Constants::to_value);
                                             string_value) {
-                                            option_with_script->m_to_value =
-                                                ActionValue<std::string>(string_value->value());
+                                            option_with_script->to_value(
+                                                ActionValue<std::string>(string_value->value()));
                                         }
                                     } catch (std::regex_error) {
                                         // Error compiling regular expressions
-                                        option_with_script->m_from_value =
-                                            ActionValue<std::string>(Config::Constants::from_value_def_str);
-                                        option_with_script->m_to_value =
-                                            ActionValue<std::string>(Config::Constants::to_value_def_str);
+                                        option_with_script->from_value(
+                                            ActionValue<std::string>(Config::Constants::from_value_def_str));
+                                        option_with_script->to_value(
+                                            ActionValue<std::string>(Config::Constants::to_value_def_str));
                                     }
                                 } else {
                                     spdlog::get("logger")->warn("No trigger values were set");
-                                    option_with_script->m_from_value =
-                                        ActionValue<std::string>(Config::Constants::from_value_def_str);
-                                    option_with_script->m_to_value =
-                                        ActionValue<std::string>(Config::Constants::to_value_def_str);
+                                    option_with_script->from_value(
+                                        ActionValue<std::string>(Config::Constants::from_value_def_str));
+                                    option_with_script->to_value(
+                                        ActionValue<std::string>(Config::Constants::to_value_def_str));
                                 }
                             }
                         };
@@ -350,68 +352,166 @@ namespace scanbdpp {
                 // the value has been checked (Check original scanbd for reference)
                 auto option_first_used =
                     std::find_if(m_actions.begin(), current_action, [&current_action](const auto &action) {
-                        return current_action->m_option_info == action.m_option_info;
+                        return current_action->option_info() == action.option_info();
                     });
 
                 if (option_first_used != current_action) {
-                    current_action->m_current_value = option_first_used->m_current_value;
+                    current_action->current_value(option_first_used->current_value());
                 } else {
-                    current_action->m_current_value =
-                        device->find_option(current_action->m_option_info)->value_as_variant();
+                    current_action->current_value(
+                        device->find_option(current_action->option_info())->value_as_variant());
                 }
 
-                std::optional<sanepp::Option::value_type> current_value = current_action->m_current_value;
+                auto current_value = current_action->current_value();
 
                 if (!current_value) {
                     spdlog::get("logger")->warn("Couldn't get current value of option {0} of device {1}",
-                                                current_action->m_option_info.name(), device_info().name());
+                                                current_action->option_info().name(), device_info().name());
                     continue;
                 }
 
-                if (!current_action->m_last_value) {
-                    current_action->m_last_value = current_value;
+                if (!current_action->last_value()) {
+                    current_action->last_value(current_value);
                 }
 
                 auto has_value_changed = [&current_action](const auto &current_value) -> bool {
                     using type = std::decay_t<decltype(current_value)>;
 
-                    if (!std::holds_alternative<type>(*current_action->m_last_value)) {
+                    if (!std::holds_alternative<type>(*current_action->last_value())) {
                         spdlog::get("logger")->critical("Type of action has changed should never happen");
                         return false;
                     }
 
                     if constexpr (std::is_same_v<type, int> || std::is_same_v<type, sanepp::Fixed> ||
                                   std::is_same_v<type, bool>) {
-                        auto to_value = std::get<ActionValue<int>>(current_action->m_to_value);
-                        auto from_value = std::get<ActionValue<int>>(current_action->m_from_value);
-                        auto last_value = std::get<type>(current_action->m_last_value.value());
+                        auto to_value = std::get<ActionValue<int>>(current_action->to_value());
+                        auto from_value = std::get<ActionValue<int>>(current_action->from_value());
+                        auto last_value = std::get<type>(current_action->last_value().value());
 
                         return to_value == current_value && from_value == last_value;
                     } else if constexpr (std::is_same_v<type, std::string>) {
-                        auto to_value = std::get<ActionValue<std::string>>(current_action->m_to_value);
-                        auto from_value = std::get<ActionValue<std::string>>(current_action->m_from_value);
-                        auto last_value = std::get<type>(current_action->m_last_value.value());
+                        auto to_value = std::get<ActionValue<std::string>>(current_action->to_value());
+                        auto from_value = std::get<ActionValue<std::string>>(current_action->from_value());
+                        auto last_value = std::get<type>(current_action->last_value().value());
 
                         return to_value == current_value && from_value == last_value;
                     } else {
-                        spdlog::get("logger")->critical("Action has invalid type should never happen");
+                        spdlog::get("logger")->critical("Action has invalid type, this should never happen");
                     }
                     return false;
                 };
 
                 bool value_changed = std::visit(has_value_changed, *current_value);
-                current_action->m_last_value = current_value;
+                current_action->last_value(current_value);
 
-                // TODO Handle script, also add event triggers that can be triggered from outside the thread
-                if (value_changed || current_action->m_trigger) {
-                    current_action->m_trigger = false;
+                if (value_changed || current_action->is_triggered()) {
+                    current_action->unset_trigger();
                     // Destroys current value of the optional thus freeing the resource (the device that the
                     // optional holds)
+                    auto env_vars = environment();
+
+                    if (auto device_env = config.get<confusepp::Option<std::string>>(
+                            Config::Constants::global / Config::Constants::environment / Config::Constants::device);
+                        device_env) {
+                        env_vars.emplace_back(device_env->value() + "=" + device->info().name());
+                    }
+
+                    if (auto action_env = config.get<confusepp::Option<std::string>>(
+                            Config::Constants::global / Config::Constants::environment / Config::Constants::action);
+                        action_env) {
+                        env_vars.emplace_back(action_env->value() + "=" + current_action->action_name());
+                    }
+                    for (auto current_function : m_functions) {
+                        auto option_first_used =
+                            std::find_if(m_actions.cbegin(), m_actions.cend(), [&current_function](const auto &action) {
+                                return current_function.option_info() == action.option_info();
+                            });
+
+                        std::optional<sanepp::Option::value_type> current_value;
+
+                        if (option_first_used != m_actions.cend()) {
+                            current_value = option_first_used->current_value();
+                        } else {
+                            current_value = device->find_option(current_function.option_info())->value_as_variant();
+                        }
+
+                        if (!current_value) {
+                            continue;
+                        }
+
+                        std::visit(
+                            [&env_vars, &current_function](const auto &value) {
+                                using type = std::decay_t<decltype(value)>;
+
+                                std::string as_string;
+
+                                if constexpr (std::is_same_v<type, int> || std::is_same_v<type, bool>) {
+                                    as_string = std::to_string(value);
+                                } else if constexpr (std::is_same_v<type, sanepp::Fixed>) {
+                                    as_string = std::to_string(value.value());
+                                } else if constexpr (std::is_same_v<type, std::string>) {
+                                    as_string = value;
+                                } else {
+                                    return;
+                                }
+
+                                env_vars.emplace_back(current_function.env() + "=" + as_string);
+                            },
+                            *current_value);
+                    }
+
                     spdlog::get("logger")->info("Closing device {0}", device_info().name());
                     device.reset();
 
                     spdlog::get("logger")->info("Start script for device {0}", device_info().name());
-                    // TODO start script
+
+                    std::unique_ptr<const char *[]> environment_variables =
+                        std::make_unique<const char *[]>(env_vars.size() + 1);
+
+                    size_t index = 0;
+                    for (auto &current_env : env_vars) {
+                        environment_variables[index++] = current_env.c_str();
+                    }
+                    environment_variables[env_vars.size()] = nullptr;
+
+                    auto script_absolute_path = make_script_path_absolute(current_action->script());
+
+                    using namespace std::string_literals;
+                    if (current_action->action_name() != ""s) {
+                        std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
+
+                        pid_t cpid;
+
+                        if ((cpid = fork()) < 0) {
+                            spdlog::get("logger")->critical("Can't fork {0}", strerror(errno));
+                        } else if (cpid > 0) {
+                            spdlog::get("logger")->info("Waiting for child {0}", script_absolute_path.c_str());
+                            int status = 0;
+
+                            if (waitpid(cpid, &status, 0) < 0) {
+                                spdlog::get("logger")->critical("waitpid: {0}", script_absolute_path.c_str());
+                            }
+
+                            if (WIFEXITED(status)) {
+                                spdlog::get("logger")->info("Child {0} exited with status: {1}",
+                                                            script_absolute_path.c_str(), WEXITSTATUS(status));
+                            }
+
+                            if (WIFSIGNALED(status)) {
+                                spdlog::get("logger")->info("Child {0} signaled with signal: {1}",
+                                                            script_absolute_path.c_str(), WTERMSIG(status));
+                            }
+                        } else {
+                            // TODO add the rest
+
+                            if (execle(script_absolute_path.c_str(), script_absolute_path.c_str(), NULL,
+                                       environment_variables.get()) < 0) {
+                                spdlog::get("logger")->critical("execle: {0}", strerror(errno));
+                            }
+
+                            exit(EXIT_FAILURE);
+                        }
+                    }
 
                     // Reopen device
                     spdlog::get("logger")->info("Reopen device {0}", device_info().name());
@@ -422,7 +522,7 @@ namespace scanbdpp {
                         return;
                     }
 
-                    current_action->m_last_value.reset();
+                    current_action->last_value(std::optional<sanepp::Option::value_type>{});
                 }
             }
 

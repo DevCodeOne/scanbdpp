@@ -1,3 +1,9 @@
+// clang-format off
+#include "common.h"
+#include <sys/types.h>
+#include <pwd.h>
+// clang-format on
+
 #include <memory>
 
 #include "spdlog/spdlog.h"
@@ -79,6 +85,7 @@ namespace scanbdpp {
     }
 
     // TODO check if method does the correct thing
+    // also make SCANBD_CFG_DIR a path
     std::experimental::filesystem::path make_script_path_absolute(
         const std::experimental::filesystem::path &script_path) {
         Config conf;
@@ -88,7 +95,7 @@ namespace scanbdpp {
         if (script_path.is_absolute()) {
             absolute_path = script_path;
         } else {
-            auto script_dir = conf.get<confusepp::Option<std::string>>(Config::Constants::script_dir);
+            auto script_dir = conf.get<confusepp::Option<std::string>>(Config::Constants::global / Config::Constants::script_dir);
 
             if (!script_dir) {
                 auto directory = run_config.config_path();
@@ -97,7 +104,7 @@ namespace scanbdpp {
             }
 
             confusepp::path script_dir_path = script_dir->value();
-            if (script_dir_path.empty() == 0) {
+            if (script_dir_path.empty()) {
                 absolute_path = SCANBD_CFG_DIR / script_path;
             } else if (script_dir_path.is_absolute()) {
                 absolute_path = script_dir_path / script_path;
@@ -107,6 +114,52 @@ namespace scanbdpp {
         }
 
         return absolute_path;
+    }
+
+    std::vector<std::string> environment() {
+        std::vector<std::string> env_vars;
+        Config config;
+
+        std::string current_env = "PATH";
+
+        if (getenv(current_env.c_str())) {
+            env_vars.emplace_back(getenv(current_env.c_str()));
+        } else {
+            env_vars.emplace_back("/usr/sbin:/usr/bin:/sbin:/bin");
+        }
+
+        current_env = "PWD";
+
+        if (getenv(current_env.c_str())) {
+            env_vars.emplace_back(getenv(current_env.c_str()));
+        } else {
+            auto working_directory = std::experimental::filesystem::current_path();
+            if (working_directory != std::experimental::filesystem::path{}) {
+                env_vars.emplace_back(working_directory.c_str());
+            } else {
+                // TODO log couldn't get working directory
+            }
+        }
+
+        current_env = "USER";
+
+        if (getenv(current_env.c_str())) {
+            env_vars.emplace_back(getenv(current_env.c_str()));
+        } else {
+            passwd *pwd = getpwuid(geteuid());
+            env_vars.emplace_back(pwd->pw_name);
+        }
+
+        current_env = "HOME";
+
+        if (getenv(current_env.c_str())) {
+            env_vars.emplace_back(getenv(current_env.c_str()));
+        } else {
+            passwd *pwd = getpwuid(geteuid());
+            env_vars.emplace_back(pwd->pw_dir);
+        }
+
+        return env_vars;
     }
 
 }  // namespace scanbdpp

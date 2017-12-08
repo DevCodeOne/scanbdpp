@@ -70,7 +70,7 @@ namespace scanbdpp {
                 std::string device = "";
                 std::string action = "";
                 if (std::getline(message, device, ',') && std::getline(message, action, ',')) {
-                    spdlog::get("logger")->info("Triggering action {0} on device {1}", action, device);
+                    spdlog::get("logger")->info("Received message to trigger action {0} on device {1}", action, device);
                     handler.trigger_action(device, action);
                 }
             }
