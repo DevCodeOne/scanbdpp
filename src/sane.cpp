@@ -30,7 +30,7 @@ namespace scanbdpp {
         auto devices = sane_instance.devices(true);
         for (auto device_info : devices) {
             spdlog::get("logger")->info("Starting polling thread for device {0}", device_info.name());
-            _device_threads.emplace_back(std::make_unique<PollHandler>(sane_instance, device_info));
+            _device_threads.emplace_back(std::make_unique<detail::PollHandler>(sane_instance, device_info));
         }
     }
 
@@ -65,23 +65,23 @@ namespace scanbdpp {
         }
     }
 
-    SaneHandler::PollHandler::PollHandler(sanepp::Sane instance, sanepp::DeviceInfo device_info)
+    detail::PollHandler::PollHandler(sanepp::Sane instance, sanepp::DeviceInfo device_info)
         : m_instance(instance),
           m_device_info(device_info),
           m_terminate(false),
-          m_poll_thread(std::bind(&SaneHandler::PollHandler::poll_device, this)) {}
+          m_poll_thread(std::bind(&PollHandler::poll_device, this)) {}
 
-    void SaneHandler::PollHandler::stop() { m_terminate = true; }
+    void detail::PollHandler::stop() { m_terminate = true; }
 
-    const sanepp::DeviceInfo &SaneHandler::PollHandler::device_info() const { return m_device_info; }
+    const sanepp::DeviceInfo &detail::PollHandler::device_info() const { return m_device_info; }
 
-    const std::atomic_bool &SaneHandler::PollHandler::should_stop() const { return m_terminate; }
+    const std::atomic_bool &detail::PollHandler::should_stop() const { return m_terminate; }
 
-    const std::thread &SaneHandler::PollHandler::poll_thread() const { return m_poll_thread; }
+    const std::thread &detail::PollHandler::poll_thread() const { return m_poll_thread; }
 
-    std::thread &SaneHandler::PollHandler::poll_thread() { return m_poll_thread; }
+    std::thread &detail::PollHandler::poll_thread() { return m_poll_thread; }
 
-    void SaneHandler::PollHandler::trigger_action(const std::string &action) {
+    void detail::PollHandler::trigger_action(const std::string &action) {
         auto matching_action = std::find_if(m_actions.begin(), m_actions.end(), [&action](const auto &current_action) {
             return action == current_action.action_name();
         });
@@ -94,8 +94,7 @@ namespace scanbdpp {
         }
     }
 
-    void SaneHandler::PollHandler::find_matching_functions(const sanepp::Device &device,
-                                                           const confusepp::Section &root) {
+    void detail::PollHandler::find_matching_functions(const sanepp::Device &device, const confusepp::Section &root) {
         Config config;
 
         if (auto function_multi_section = root.get<confusepp::Multisection>(Config::Constants::function);
@@ -129,11 +128,13 @@ namespace scanbdpp {
                                     return current.option_info() == current_option.info();
                                 });
                             if (function_with_option != m_functions.end()) {
-                                spdlog::get("logger")->warn("Setting function with value {0} to value {1} for option {2}",
-                                                            function_with_option->env(), env->value(), current_option.info().name());
+                                spdlog::get("logger")->warn(
+                                    "Setting function with value {0} to value {1} for option {2}",
+                                    function_with_option->env(), env->value(), current_option.info().name());
                                 function_with_option->env(env->value());
                             } else {
-                                spdlog::get("logger")->info("Adding function with value {0} for option {1}", env->value(), current_option.info().name());
+                                spdlog::get("logger")->info("Adding function with value {0} for option {1}",
+                                                            env->value(), current_option.info().name());
                                 m_functions.emplace_back(Function(current_option.info()).env(env->value()));
                             }
                         } else {
@@ -146,7 +147,7 @@ namespace scanbdpp {
         }
     }
 
-    void SaneHandler::PollHandler::find_matching_options(const sanepp::Device &device, const confusepp::Section &root) {
+    void detail::PollHandler::find_matching_options(const sanepp::Device &device, const confusepp::Section &root) {
         Config config;
 
         if (auto action_multi_section = root.get<confusepp::Multisection>(Config::Constants::action);
@@ -304,7 +305,7 @@ namespace scanbdpp {
         }
     }
 
-    void SaneHandler::PollHandler::poll_device() {
+    void detail::PollHandler::poll_device() {
         SignalHandler signal_handler;
         signal_handler.disable_signals_for_thread();
 
@@ -553,4 +554,5 @@ namespace scanbdpp {
         }
         spdlog::get("logger")->info("Stopped polling device {0}", device->info().name());
     }
+
 }  // namespace scanbdpp
