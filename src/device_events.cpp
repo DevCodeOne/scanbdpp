@@ -86,7 +86,6 @@ namespace scanbdpp {
         sane.start();
     }
 
-    // TODO Look if the device is even used and only restart sane if it's necessary
     void DeviceEvents::device_removed() {
         SaneHandler sane;
         sane.stop();

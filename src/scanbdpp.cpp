@@ -235,11 +235,13 @@ int main(int argc, char *argv[]) {
     } else {
         if (!run_config.foreground()) {
             spdlog::get("logger")->info("Daemonizing scanbd");
-            daemonize();
+            if (!daemonize()) {
+                return EXIT_FAILURE;
+            }
         }
 
-        std::string euser = "";
-        std::string egroup = "";
+        std::string euser;
+        std::string egroup;
         if (auto value = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::user); value) {
             euser = value->value();
         }
@@ -276,7 +278,7 @@ int main(int argc, char *argv[]) {
             die(EXIT_FAILURE);
         }
 
-        std::string scanbd_pid_path = "";
+        std::string scanbd_pid_path;
 
         if (auto value = config.get<Option<std::string>>(Config::Constants::global / Config::Constants::pidfile)) {
             scanbd_pid_path = value->value();
@@ -295,7 +297,7 @@ int main(int argc, char *argv[]) {
                 spdlog::get("logger")->critical("Couldn't clear pidfile {0}", strerror(errno));
                 die(EXIT_FAILURE);
             }
-            std::string pid_string = std::to_string(getpid()).c_str();
+            std::string pid_string = std::to_string(getpid());
             if (write(pid_fd, pid_string.c_str(), pid_string.size()) < 0) {
                 spdlog::get("logger")->critical("Couldn't write to pidfile {0}", strerror(errno));
                 die(EXIT_FAILURE);
@@ -345,9 +347,11 @@ int main(int argc, char *argv[]) {
             spdlog::get("logger")->warn("SANE_CONFIG_DIR not set");
         }
 
-        sane.start();
-        udev.start();
-        pipe.start();
+        if (!signals.should_exit()) {
+            sane.start();
+            udev.start();
+            pipe.start();
+        }
 
         while (true) {
             if (signals.should_exit()) {

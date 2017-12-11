@@ -79,8 +79,6 @@ namespace scanbdpp {
             } else {
                 spdlog::get("logger")->critical("Config failed to parse");
             }
-            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-            exit(EXIT_FAILURE);
         }
     }
 
@@ -137,7 +135,7 @@ namespace scanbdpp {
             if (working_directory != std::experimental::filesystem::path{}) {
                 env_vars.emplace_back(working_directory.c_str());
             } else {
-                // TODO log couldn't get working directory
+                spdlog::get("logger")->warn("Couldn't get working directory");
             }
         }
 

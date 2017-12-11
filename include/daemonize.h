@@ -1,5 +1,5 @@
 #pragma once
 
 namespace scanbdpp {
-    void daemonize();
+    bool daemonize();
 }

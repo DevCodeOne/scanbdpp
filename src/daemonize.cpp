@@ -1,27 +1,33 @@
+// clang-format off
 #include "common.h"
+#include <errno.h>
+#include <string.h>
+// clang-format on
 
 #include <cstdlib>
 #include <initializer_list>
 
+#include "spdlog/spdlog.h"
+
 #include "daemonize.h"
 
 namespace scanbdpp {
-    void daemonize() {
+    bool daemonize() {
         if (pid_t pid = fork(); pid < 0) {
-            // Couldn't fork
-            exit(EXIT_FAILURE);
+            spdlog::get("logger")->critical("Couldn't fork {0}", strerror(errno));
+            return false;
         } else if (pid > 0) {
             exit(EXIT_SUCCESS);
         }
 
         if (setsid() < 0) {
-            // setsid error
-            exit(EXIT_SUCCESS);
+            spdlog::get("logger")->critical("setsid error {0}", strerror(errno));
+            return false;
         }
 
         if (pid_t pid = fork(); pid < 0) {
-            // Coulnd't fork
-            exit(EXIT_FAILURE);
+            spdlog::get("logger")->critical("Couldn't fork {0}", strerror(errno));
+            return false;
         } else if (pid > 0) {
             exit(EXIT_SUCCESS);
         }
@@ -29,14 +35,13 @@ namespace scanbdpp {
         int ofd = -1;
 
         if (ofd = open("/dev/null", O_RDWR); ofd < 0) {
-            // Coulnd't open /dev/null
-            exit(EXIT_FAILURE);
+            spdlog::get("logger")->warn("Couldn't open /dev/null {0}", strerror(errno));
+            return false;
         }
 
         auto point_filedes_to = [ofd](int fd) {
             if (dup2(ofd, fd) < 0) {
-                // Couldn't set fd to ofd
-                exit(EXIT_SUCCESS);
+                spdlog::get("logger")->warn("Couldn't set filedescriptor {0}", strerror(errno));
             }
         };
 
@@ -45,8 +50,9 @@ namespace scanbdpp {
         }
 
         if (chdir("/") < 0) {
-            // Couldn't change working directory
-            exit(EXIT_FAILURE);
+            spdlog::get("logger")->warn("Couldn't change working directory", strerror(errno));
         }
+
+        return true;
     }
 }  // namespace scanbdpp

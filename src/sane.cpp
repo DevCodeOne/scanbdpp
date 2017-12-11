@@ -1,5 +1,6 @@
 // clang-format off
 #include "common.h"
+#include <signal.h>
 #include <sys/wait.h>
 // clang-format on
 
@@ -8,8 +9,6 @@
 #include <chrono>
 #include <regex>
 #include <thread>
-
-#include <signal.h>
 
 #include <spdlog/spdlog.h>
 
@@ -23,7 +22,7 @@ namespace scanbdpp {
 
     void SaneHandler::start() {
         std::lock_guard<std::mutex> device_guard(_device_mutex);
-        if (_device_threads.size() != 0) {
+        if (!_device_threads.empty()) {
             return;
         }
 
@@ -38,7 +37,7 @@ namespace scanbdpp {
     void SaneHandler::stop() {
         std::lock_guard<std::mutex> device_guard(_device_mutex);
 
-        if (_device_threads.size() == 0) {
+        if (_device_threads.empty()) {
             return;
         }
 
@@ -83,10 +82,15 @@ namespace scanbdpp {
     std::thread &SaneHandler::PollHandler::poll_thread() { return m_poll_thread; }
 
     void SaneHandler::PollHandler::trigger_action(const std::string &action) {
-        for (auto &current_action : m_actions) {
-            if (current_action.action_name() == action) {
-                current_action.set_trigger();
-            }
+        auto matching_action = std::find_if(m_actions.begin(), m_actions.end(), [&action](const auto &current_action) {
+            return action == current_action.action_name();
+        });
+
+        if (matching_action != m_actions.end()) {
+            spdlog::get("logger")->info("Triggering Action {0} for device {1}", action, device_info().name());
+            matching_action->set_trigger();
+        } else {
+            spdlog::get("logger")->warn("Action {0} was not found for device {1}", action, device_info().name());
         }
     }
 
@@ -96,7 +100,7 @@ namespace scanbdpp {
 
         if (auto function_multi_section = root.get<confusepp::Multisection>(Config::Constants::function);
             function_multi_section) {
-            for (auto current_function : function_multi_section->sections()) {
+            for (const auto &current_function : function_multi_section->sections()) {
                 if (auto filter = current_function.get<confusepp::Option<std::string>>(Config::Constants::filter);
                     filter) {
                     std::regex function_regex;
@@ -125,13 +129,16 @@ namespace scanbdpp {
                                     return current.option_info() == current_option.info();
                                 });
                             if (function_with_option != m_functions.end()) {
-                                // Warning for overriding function
+                                spdlog::get("logger")->warn("Setting function with value {0} to value {1} for option {2}",
+                                                            function_with_option->env(), env->value(), current_option.info().name());
                                 function_with_option->env(env->value());
                             } else {
+                                spdlog::get("logger")->info("Adding function with value {0} for option {1}", env->value(), current_option.info().name());
                                 m_functions.emplace_back(Function(current_option.info()).env(env->value()));
                             }
                         } else {
-                            // Error no env is set
+                            spdlog::get("logger")->warn("Function {0} sets no environment variable",
+                                                        current_function.title());
                         }
                     }
                 }
@@ -154,7 +161,7 @@ namespace scanbdpp {
                     try {
                         action_regex.assign(filter->value(), std::regex_constants::extended);
                     } catch (std::regex_error) {
-                        // Couldn't compile regex
+                        spdlog::get("logger")->warn("Couldn't compile regular expression for the option filter");
                         regex_is_valid = false;
                     }
 
@@ -164,9 +171,8 @@ namespace scanbdpp {
 
                     auto script = current_action.get<confusepp::Option<std::string>>(Config::Constants::script);
 
-                    // TODO discuss if it should be possible to install an action without a script to execute
                     if (!script) {
-                        // Error no script set
+                        spdlog::get("logger")->warn("No script was set for action {0}", current_action.title());
                         continue;
                     }
 
@@ -223,7 +229,8 @@ namespace scanbdpp {
                                         int_value) {
                                         option_with_script->from_value(ActionValue<int>(int_value->value()));
                                     } else {
-                                        spdlog::get("logger")->warn("No from value was set");
+                                        spdlog::get("logger")->warn("No from-value was set for action {0}",
+                                                                    current_action.title());
                                     }
 
                                     if (auto int_value =
@@ -231,10 +238,12 @@ namespace scanbdpp {
                                         int_value) {
                                         option_with_script->to_value(ActionValue<int>(int_value->value()));
                                     } else {
-                                        spdlog::get("logger")->warn("No to value was set");
+                                        spdlog::get("logger")->warn("No to-value was set for action {0}",
+                                                                    current_action.title());
                                     }
                                 } else {
-                                    spdlog::get("logger")->warn("No trigger values were set");
+                                    spdlog::get("logger")->warn("No trigger values were set for action {0}",
+                                                                current_action.title());
                                     option_with_script->from_value(
                                         ActionValue<int>(Config::Constants::from_value_def_int));
                                     option_with_script->to_value(ActionValue<int>(Config::Constants::to_value_def_int));
@@ -250,6 +259,9 @@ namespace scanbdpp {
                                             string_value) {
                                             option_with_script->from_value(
                                                 ActionValue<std::string>(string_value->value()));
+                                        } else {
+                                            spdlog::get("logger")->warn("No from-value was set for action {0}",
+                                                                        current_action.title());
                                         }
 
                                         if (auto string_value = trigger_section->get<confusepp::Option<std::string>>(
@@ -257,16 +269,22 @@ namespace scanbdpp {
                                             string_value) {
                                             option_with_script->to_value(
                                                 ActionValue<std::string>(string_value->value()));
+                                        } else {
+                                            spdlog::get("logger")->warn("No to-value was set for action {0}",
+                                                                        current_action.title());
                                         }
                                     } catch (std::regex_error) {
-                                        // Error compiling regular expressions
+                                        spdlog::get("logger")->warn(
+                                            "Couldn't compile regular expressions for action {0}",
+                                            current_action.title());
                                         option_with_script->from_value(
                                             ActionValue<std::string>(Config::Constants::from_value_def_str));
                                         option_with_script->to_value(
                                             ActionValue<std::string>(Config::Constants::to_value_def_str));
                                     }
                                 } else {
-                                    spdlog::get("logger")->warn("No trigger values were set");
+                                    spdlog::get("logger")->warn("No trigger values were set for action {0}",
+                                                                current_action.title());
                                     option_with_script->from_value(
                                         ActionValue<std::string>(Config::Constants::from_value_def_str));
                                     option_with_script->to_value(
@@ -310,7 +328,7 @@ namespace scanbdpp {
 
         if (auto device_multi_section = config.get<confusepp::Multisection>(Config::Constants::device);
             device_multi_section) {
-            for (auto device_section : device_multi_section->sections()) {
+            for (const auto &device_section : device_multi_section->sections()) {
                 auto device_filter = device_section.get<confusepp::Option<std::string>>(Config::Constants::filter);
                 if (!device_filter) {
                     continue;
@@ -321,7 +339,8 @@ namespace scanbdpp {
                 try {
                     device_regex.assign(device_filter->value(), std::regex_constants::extended);
                 } catch (std::regex_error) {
-                    // Regex error
+                    spdlog::get("logger")->warn("Couldn't compile device filter for device section {0}",
+                                                device_section.title());
                     continue;
                 }
 
@@ -389,15 +408,16 @@ namespace scanbdpp {
                         auto last_value = std::get<type>(current_action->last_value().value());
 
                         return to_value == current_value && from_value == last_value;
-                    } else if constexpr (std::is_same_v<type, std::string>) {
+                    }
+                    if constexpr (std::is_same_v<type, std::string>) {
                         auto to_value = std::get<ActionValue<std::string>>(current_action->to_value());
                         auto from_value = std::get<ActionValue<std::string>>(current_action->from_value());
                         auto last_value = std::get<type>(current_action->last_value().value());
 
                         return to_value == current_value && from_value == last_value;
-                    } else {
-                        spdlog::get("logger")->critical("Action has invalid type, this should never happen");
                     }
+                    spdlog::get("logger")->critical("Action has invalid type, this should never happen");
+
                     return false;
                 };
 
@@ -476,44 +496,47 @@ namespace scanbdpp {
 
                     auto script_absolute_path = make_script_path_absolute(current_action->script());
 
-                    using namespace std::string_literals;
-                    if (current_action->action_name() != ""s) {
-                        std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
+                    if (std::experimental::filesystem::exists(script_absolute_path)) {
+                        using namespace std::string_literals;
+                        if (current_action->action_name() != ""s) {
+                            std::this_thread::sleep_for(std::chrono::milliseconds(timeout));
 
-                        pid_t cpid;
+                            pid_t cpid;
 
-                        if ((cpid = fork()) < 0) {
-                            spdlog::get("logger")->critical("Can't fork {0}", strerror(errno));
-                        } else if (cpid > 0) {
-                            spdlog::get("logger")->info("Waiting for child {0}", script_absolute_path.c_str());
-                            int status = 0;
+                            if ((cpid = fork()) < 0) {
+                                spdlog::get("logger")->critical("Can't fork {0}", strerror(errno));
+                            } else if (cpid > 0) {
+                                spdlog::get("logger")->info("Waiting for child {0}", script_absolute_path.c_str());
+                                int status = 0;
 
-                            if (waitpid(cpid, &status, 0) < 0) {
-                                spdlog::get("logger")->critical("waitpid: {0}", script_absolute_path.c_str());
+                                if (waitpid(cpid, &status, 0) < 0) {
+                                    spdlog::get("logger")->critical("waitpid: {0}", script_absolute_path.c_str());
+                                }
+
+                                if (WIFEXITED(status)) {
+                                    spdlog::get("logger")->info("Child {0} exited with status: {1}",
+                                                                script_absolute_path.c_str(), WEXITSTATUS(status));
+                                }
+
+                                if (WIFSIGNALED(status)) {
+                                    spdlog::get("logger")->info("Child {0} signaled with signal: {1}",
+                                                                script_absolute_path.c_str(), WTERMSIG(status));
+                                }
+                            } else {
+                                // TODO add the rest
+
+                                if (execle(script_absolute_path.c_str(), script_absolute_path.c_str(), NULL,
+                                           environment_variables.get()) < 0) {
+                                    spdlog::get("logger")->critical("execle: {0}", strerror(errno));
+                                }
+
+                                exit(EXIT_FAILURE);
                             }
-
-                            if (WIFEXITED(status)) {
-                                spdlog::get("logger")->info("Child {0} exited with status: {1}",
-                                                            script_absolute_path.c_str(), WEXITSTATUS(status));
-                            }
-
-                            if (WIFSIGNALED(status)) {
-                                spdlog::get("logger")->info("Child {0} signaled with signal: {1}",
-                                                            script_absolute_path.c_str(), WTERMSIG(status));
-                            }
-                        } else {
-                            // TODO add the rest
-
-                            if (execle(script_absolute_path.c_str(), script_absolute_path.c_str(), NULL,
-                                       environment_variables.get()) < 0) {
-                                spdlog::get("logger")->critical("execle: {0}", strerror(errno));
-                            }
-
-                            exit(EXIT_FAILURE);
                         }
+                    } else {
+                        spdlog::get("logger")->warn("Script {0} does not exist", script_absolute_path.c_str());
                     }
 
-                    // Reopen device
                     spdlog::get("logger")->info("Reopen device {0}", device_info().name());
                     device = device_info().open();
 
