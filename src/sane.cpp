@@ -26,12 +26,16 @@ namespace scanbdpp {
             return;
         }
 
+        spdlog::get("logger")->info("Starting polling threads");
+
         sanepp::Sane sane_instance;
         auto devices = sane_instance.devices(true);
         for (auto device_info : devices) {
             spdlog::get("logger")->info("Starting polling thread for device {0}", device_info.name());
             _device_threads.emplace_back(std::make_unique<detail::PollHandler>(sane_instance, device_info));
         }
+
+        spdlog::get("logger")->info("Started polling threads");
     }
 
     void SaneHandler::stop() {
@@ -52,6 +56,7 @@ namespace scanbdpp {
         }
 
         _device_threads.clear();
+        spdlog::get("logger")->info("Terminated all polling threads");
     }
 
     void SaneHandler::trigger_action(const std::string &device_name, const std::string &action_name) {
@@ -554,5 +559,54 @@ namespace scanbdpp {
         }
         spdlog::get("logger")->info("Stopped polling device {0}", device->info().name());
     }
+
+    detail::Action::Action(const sanepp::OptionInfo &option_info) : m_option_info(option_info) {}
+    detail::Action::Action(Action &&other)
+        : m_from_value(std::move(other.m_from_value)),
+          m_to_value(std::move(other.m_to_value)),
+          m_option_info(std::move(other.m_option_info)),
+          m_last_value(std::move(other.m_last_value)),
+          m_current_value(std::move(other.m_current_value)),
+          m_script(std::move(other.m_script)),
+          m_action_name(std::move(other.m_action_name)),
+          m_trigger((bool)other.m_trigger) {}
+
+    void detail::Action::set_trigger() { m_trigger = true; }
+    void detail::Action::unset_trigger() { m_trigger = false; }
+    void detail::Action::script(const std::experimental::filesystem::path &new_script) { m_script = new_script; }
+    void detail::Action::action_name(const std::string &new_action_name) { m_action_name = new_action_name; }
+    void detail::Action::option_info(const sanepp::OptionInfo &new_option_info) { m_option_info = new_option_info; }
+    void detail::Action::current_value(const std::optional<sanepp::Option::value_type> new_current_value) {
+        m_current_value = new_current_value;
+    }
+    void detail::Action::last_value(const std::optional<sanepp::Option::value_type> new_last_value) {
+        m_last_value = new_last_value;
+    }
+    void detail::Action::from_value(const value_type &new_from_value) { m_from_value = new_from_value; }
+    void detail::Action::to_value(const value_type &new_to_value) { m_to_value = new_to_value; }
+
+    bool detail::Action::is_triggered() const { return m_trigger; }
+    const std::string &detail::Action::action_name() const { return m_action_name; }
+    const std::experimental::filesystem::path &detail::Action::script() const { return m_script; }
+    const std::optional<sanepp::Option::value_type> &detail::Action::current_value() const { return m_current_value; }
+    const std::optional<sanepp::Option::value_type> &detail::Action::last_value() const { return m_last_value; }
+    const sanepp::OptionInfo &detail::Action::option_info() const { return m_option_info; }
+    auto detail::Action::from_value() const -> const value_type & { return m_from_value; }
+    auto detail::Action::to_value() const -> const value_type & { return m_to_value; }
+
+    detail::Function::Function(const sanepp::OptionInfo &option_info) : m_option_info(option_info) {}
+
+    auto detail::Function::option_info(const sanepp::OptionInfo &new_option_info) -> Function & {
+        m_option_info = new_option_info;
+        return *this;
+    }
+
+    auto detail::Function::env(const std::string &new_env) -> Function & {
+        m_env = new_env;
+        return *this;
+    }
+
+    const sanepp::OptionInfo &detail::Function::option_info() const { return m_option_info; }
+    const std::string &detail::Function::env() const { return m_env; }
 
 }  // namespace scanbdpp

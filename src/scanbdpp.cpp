@@ -34,6 +34,7 @@ int main(int argc, char *argv[]) {
     SignalHandler signals;
     signals.install();
 
+    spdlog::set_async_mode(8192, spdlog::async_overflow_policy::discard_log_msg);
     auto logger = spdlog::stdout_color_mt("logger");
     RunConfiguration run_config;
 

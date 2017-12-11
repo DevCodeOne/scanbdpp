@@ -65,10 +65,9 @@ namespace scanbdpp {
                 }
 
             } else if (ret != 0) {
-                // TODO handle message
                 std::istringstream message(buf);
-                std::string device = "";
-                std::string action = "";
+                std::string device;
+                std::string action;
                 if (std::getline(message, device, ',') && std::getline(message, action, ',')) {
                     spdlog::get("logger")->info("Received message to trigger action {0} on device {1}", action, device);
                     handler.trigger_action(device, action);
@@ -86,16 +85,23 @@ namespace scanbdpp {
         if (!_thread_started) {
             _thread_started = true;
             _thread_inst = std::thread(PipeHandler::pipe_thread);
+            spdlog::get("logger")->info("Starting pipe thread");
         }
     }
 
     void PipeHandler::stop() const {
         if (_thread_started) {
             _thread_stop = true;
+        } else {
+            return;
         }
 
         if (_thread_inst.joinable()) {
             _thread_inst.join();
+            _thread_started = false;
+            spdlog::get("logger")->info("Stopped pipe thread");
+        } else {
+            spdlog::get("logger")->info("Couldn't join pipe handler");
         }
     }
 
