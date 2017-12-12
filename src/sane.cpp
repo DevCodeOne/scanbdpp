@@ -20,8 +20,23 @@
 
 namespace scanbdpp {
 
+    SaneHandler::SaneHandler() {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+        ++_instance_count;
+    }
+
+    SaneHandler::~SaneHandler() {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+        --_instance_count;
+
+        if (!_instance_count) {
+            stop();
+        }
+    }
+
     void SaneHandler::start() {
-        std::lock_guard<std::mutex> device_guard(_device_mutex);
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+
         if (!_device_threads.empty()) {
             return;
         }
@@ -39,7 +54,7 @@ namespace scanbdpp {
     }
 
     void SaneHandler::stop() {
-        std::lock_guard<std::mutex> device_guard(_device_mutex);
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
 
         if (_device_threads.empty()) {
             return;
@@ -60,7 +75,7 @@ namespace scanbdpp {
     }
 
     void SaneHandler::trigger_action(const std::string &device_name, const std::string &action_name) {
-        std::lock_guard<std::mutex> device_guard(_device_mutex);
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
 
         for (auto &current_handler : _device_threads) {
             if (current_handler->device_info().name() == device_name) {

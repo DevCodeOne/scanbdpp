@@ -12,6 +12,20 @@
 #include "signal_handler.h"
 
 namespace scanbdpp {
+    UDevHandler::UDevHandler() {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+        ++_instance_count;
+    }
+
+    UDevHandler::~UDevHandler() {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+        --_instance_count;
+
+        if (!_instance_count) {
+            stop();
+        }
+    }
+
     void UDevHandler::udev_thread() {
         SignalHandler signal_handler;
         signal_handler.disable_signals_for_thread();
@@ -45,6 +59,8 @@ namespace scanbdpp {
     }
 
     void UDevHandler::start() const {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+
         if (!_thread_started) {
             _thread_started = true;
             _thread_inst = std::thread(udev_thread);
@@ -53,12 +69,17 @@ namespace scanbdpp {
     }
 
     void UDevHandler::stop() const {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+
         if (_thread_started) {
             _thread_stop = true;
             if (_thread_inst.joinable()) {
                 _thread_inst.join();
+                _thread_started = false;
+                spdlog::get("logger")->info("Stopped udev thread");
+            } else {
+                spdlog::get("logger")->info("Couldn't join udev thread");
             }
-            spdlog::get("logger")->info("Stopped udev thread");
         }
     }
 }  // namespace scanbdpp

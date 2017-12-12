@@ -21,13 +21,13 @@
 namespace scanbdpp {
 
     PipeHandler::PipeHandler() {
-        std::lock_guard<std::mutex> guard{_instance_mutex};
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
 
         ++_instance_count;
     }
 
     PipeHandler::~PipeHandler() {
-        std::lock_guard<std::mutex> guard{_instance_mutex};
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
 
         --_instance_count;
 
@@ -41,21 +41,21 @@ namespace scanbdpp {
         signal_handler.disable_signals_for_thread();
         SaneHandler handler;
 
-        if (mkfifo(PipeHandler::pipe_path.c_str(), S_IRUSR | S_IWUSR) != 0) {
+        if (mkfifo(Constants::pipe_path.c_str(), S_IRUSR | S_IWUSR) != 0) {
             spdlog::get("logger")->warn("Error creating pipe {0}", strerror(errno));
         }
 
-        int pipe_des = open(PipeHandler::pipe_path.c_str(), O_RDONLY | O_NONBLOCK);
+        int pipe_des = open(Constants::pipe_path.c_str(), O_RDONLY | O_NONBLOCK);
 
         if (pipe_des < 0) {
             spdlog::get("logger")->critical("Error opening pipe {0}", strerror(errno));
             return;
         }
 
-        char buf[_max_message_size];
+        char buf[Constants::_max_message_size];
 
         while (!_thread_stop) {
-            if (int ret = read(pipe_des, buf, _max_message_size); ret < 0) {
+            if (int ret = read(pipe_des, buf, Constants::_max_message_size); ret < 0) {
                 switch (errno) {
                     case EAGAIN:
                         break;
@@ -78,10 +78,12 @@ namespace scanbdpp {
         }
 
         close(pipe_des);
-        unlink(PipeHandler::pipe_path.c_str());
+        unlink(Constants::pipe_path.c_str());
     }
 
     void PipeHandler::start() const {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+
         if (!_thread_started) {
             _thread_started = true;
             _thread_inst = std::thread(PipeHandler::pipe_thread);
@@ -90,6 +92,8 @@ namespace scanbdpp {
     }
 
     void PipeHandler::stop() const {
+        std::lock_guard<std::recursive_mutex> guard(_instance_mutex);
+
         if (_thread_started) {
             _thread_stop = true;
         } else {
@@ -101,19 +105,19 @@ namespace scanbdpp {
             _thread_started = false;
             spdlog::get("logger")->info("Stopped pipe thread");
         } else {
-            spdlog::get("logger")->info("Couldn't join pipe handler");
+            spdlog::get("logger")->info("Couldn't join pipe thread");
         }
     }
 
     void PipeHandler::write_message(const std::string &message) const {
-        int pipe_des = open(PipeHandler::pipe_path.c_str(), O_WRONLY | O_NONBLOCK);
+        int pipe_des = open(Constants::pipe_path.c_str(), O_WRONLY | O_NONBLOCK);
 
         if (pipe_des < 0) {
             spdlog::get("logger")->critical("Error opening pipe {0}", strerror(errno));
             return;
         }
 
-        if (message.size() > PipeHandler::_max_message_size) {
+        if (message.size() > Constants::_max_message_size) {
             spdlog::get("logger")->critical("Message is too long");
             return;
         }

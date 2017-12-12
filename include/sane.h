@@ -166,13 +166,17 @@ namespace scanbdpp {
 
     class SaneHandler {
        public:
+        SaneHandler();
+        ~SaneHandler();
+
         void start();
         void stop();
         void trigger_action(const std::string &device_name, const std::string &action_name);
 
        private:
-        static inline std::mutex _device_mutex;
+        static inline std::recursive_mutex _instance_mutex;
         static inline std::vector<std::unique_ptr<detail::PollHandler>> _device_threads;
+        static inline std::atomic_int _instance_count;
     };
 
 }  // namespace scanbdpp
