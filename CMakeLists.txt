@@ -5,6 +5,7 @@ add_compile_options(-Wall -Wextra -Wpedantic -g)
 add_definitions(-std=c++17)
 add_definitions(-DSANED_PATH="sane")
 add_definitions(-DSCANBD_CFG_DIR="/etc/scanbd/")
+add_definitions(-DSPDLOG_ENABLE_SYSLOG=1)
 
 set(SPDLOG_BUILD_TESTING OFF CACHE BOOL "Disable spdlog tests")
 set(CXXOPTS_BUILD_EXAMPLES OFF CACHE BOOL "Disable cxxopts examples")

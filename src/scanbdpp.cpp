@@ -34,8 +34,6 @@ int main(int argc, char *argv[]) {
     SignalHandler signals;
     signals.install();
 
-    spdlog::set_async_mode(8192, spdlog::async_overflow_policy::discard_log_msg);
-    auto logger = spdlog::stdout_color_mt("logger");
     RunConfiguration run_config;
 
     cxxopts::Options options("scanbd", "scanbd is a scanner button daemon");
@@ -107,7 +105,20 @@ int main(int argc, char *argv[]) {
         return (EXIT_FAILURE);
     }
 
+    if (run_config.foreground()) {
+        spdlog::stdout_color_mt("logger");
+    } else {
+        spdlog::syslog_logger("logger", "scanbd", LOG_PID);
+    }
+
     Config config;
+
+    if (!config) {
+        spdlog::get("logger")->info("Exiting scanbd");
+        spdlog::drop_all();
+        return EXIT_FAILURE;
+    }
+
     PipeHandler pipe;
     SaneHandler sane;
     UDevHandler udev;
