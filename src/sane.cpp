@@ -127,7 +127,8 @@ namespace scanbdpp {
                     try {
                         function_regex.assign(filter->value(), std::regex_constants::extended);
                     } catch (std::regex_error) {
-                        spdlog::get("logger")->critical("Couldn't compile regex");
+                        spdlog::get("logger")->critical("Couldn't compile regex for function section {0}",
+                                                        current_function.title());
                         regex_is_valid = false;
                     }
 
@@ -149,12 +150,14 @@ namespace scanbdpp {
                                 });
                             if (function_with_option != m_functions.end()) {
                                 spdlog::get("logger")->warn(
-                                    "Setting function with value {0} to value {1} for option {2}",
-                                    function_with_option->env(), env->value(), current_option.info().name());
+                                    "Setting function with value {0} to value {1} for option {2} of device {3}",
+                                    function_with_option->env(), env->value(), current_option.info().name(),
+                                    device.info().name());
                                 function_with_option->env(env->value());
                             } else {
-                                spdlog::get("logger")->info("Adding function with value {0} for option {1}",
-                                                            env->value(), current_option.info().name());
+                                spdlog::get("logger")->info(
+                                    "Adding function with value {0} for option {1} of device {2}", env->value(),
+                                    current_option.info().name(), device.info().name());
                                 m_functions.emplace_back(Function(current_option.info()).env(env->value()));
                             }
                         } else {
