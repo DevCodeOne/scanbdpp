@@ -26,10 +26,6 @@ namespace scanbdpp {
 
         RunConfiguration run_config;
 
-        if (_config) {
-            return;
-        }
-
         using namespace confusepp;
 
         auto action_structure =
