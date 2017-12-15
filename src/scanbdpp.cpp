@@ -103,6 +103,9 @@ int main(int argc, char *argv[]) {
     } catch (cxxopts::argument_incorrect_type e) {
         std::cout << "The argument provided for the option is of wrong type" << '\n' << e.what() << std::endl;
         return (EXIT_FAILURE);
+    } catch (cxxopts::missing_argument_exception e) {
+        std::cout << "The option needs an argument" << '\n' << e.what() << std::endl;
+        return (EXIT_FAILURE);
     }
 
     if (run_config.foreground()) {
